@@ -1,4 +1,5 @@
-#lexer.md
+# lexer.md
+
 The lexer breaks the program into a stream of tuples consisting of 
 * a token-type, 
 * a token, 
@@ -30,7 +31,7 @@ as an identifier.
 
 Programmers supply a non-negative decimal priority when adding token types, used only for its 
 ordering (as in the Dewey-decimal library system). The lexer will check for matches in descending 
-priority order. This makes it possible to add, for example, <subscript> and </subscript> as tokens 
-without that conflicting with a bare <. More than one match is allowed at a priority level, as long as 
+priority order. This makes it possible to add, for example, \<subscript> and \</subscript> as tokens 
+without that conflicting with a bare \<. More than one match is allowed at a priority level, as long as 
 they return the same result.
 
