@@ -19,7 +19,10 @@ At each point in the text, an anchored match is done against all defined regular
 at each level. It is permitted for more than one to match at a level as long as the resulting 
 token and token-type are the same.
 
-In wombat only ascii characters are used, but programmers can add their own extra ones as long as they don’t cause conflicts. For example in wombat an identifier starting with an underscore (\_) has token-type freeVariable. But the programmers might like to say that sequences of greek letters also return a freeVariable token (thus avoiding the clunky \_). 
+In wombat only ascii characters are used, but programmers can add their own extra ones as long as 
+they don’t cause conflicts. For example in wombat an identifier starting with an underscore (\_) 
+has token-type freeVariable. But the programmers might like to say that sequences of greek letters 
+also return a freeVariable token (thus avoiding the clunky \_). 
 * FreeVariable. Starts with underscore in default wombat.
 * NewFreeVariable. Precede with backquote in wombat.
 * Identifier. Sequence of letters, digits, underscore but not starting with digit or underscore.
@@ -35,3 +38,10 @@ priority order. This makes it possible to add, for example, \<subscript> and \</
 without that conflicting with a bare \<. More than one match is allowed at a priority level, as long as 
 they return the same result.
 
+The lexer then returns a stream of tokens with extra information:
+* token
+* token type
+* preceding indentation (if at start of line, else -1)
+* following white space? (false if following token is adjacent)
+* source file
+* location (line num, char pos)

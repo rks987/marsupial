@@ -1,5 +1,5 @@
-def die(s,fn,line,char):
-    raise Exception(s+" in "+fn+"("+line+"/"+pos+")")
+def die(s,fn,lineNum,pos):
+    raise Exception(s+" in "+fn+"("+str(lineNum)+"/"+str(pos)+")")
 
 import re
 white = re.compile(r"\s*") # always matches
@@ -9,11 +9,13 @@ import decimal
 tokenByPrio = {}  # for each token priority, list of pat*patType
 tokenPrios = []   # keep sorted list of Prios, 
 def insertToken(tokType, prio, tokRE):
+    global tokenPrios
     if prio in tokenByPrio:
         tokenByPrio[prio].append((tokRE,tokType))
     else:
         tokenByPrio[prio] = [(tokRE,tokType)]
-        tokenPrios = [*iter(tokenByPrio.keys())].sort(reverse=True)
+        tokenPrios = sorted([*iter(tokenByPrio.keys())],reverse=True)
+    return
 
 def lexer(fileName):
     lineNum = 0
@@ -29,7 +31,11 @@ def lexer(fileName):
                 yield from lexer(m[1])  # recurse
             else:
                 n = re.compile(r"token\s+(\w+)\s+(\d+\.?\d*)\s+([^\n]+)").match(line,indent+2)
-                insertToken(n[1], decimal.Decimal(n[2]), re.compile(n[3]))
+                if n:
+                    #print(n[3])
+                    insertToken(n[1], decimal.Decimal(n[2]), re.compile(n[3]))
+                else:
+                    raise Exception("unknown %/ cmd:"+line)
         else: # multiple ordinary tokens
             while pos!=len(line):
                 found = None
@@ -52,7 +58,9 @@ def lexer(fileName):
                                gotWhite=gotWhite, location=(fileName,lineNum,pos))
                         indent = -1
                         pos += len(found[0])+len(wm[0])
-                        break
+                    break
+    return
+
 # too complicated...FIXME
 
 if __name__ == "__main__":

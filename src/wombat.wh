@@ -6,18 +6,18 @@
 %/token NewIdentifier 100 `[a-zA-Z][_a-zA-Z0-9]*'*
 %/token String 100 "(\\"|\\\\|[^"\\])*"
 %/token Number 100 [0-9]+(\.[0-9]+)?
-%/token OperatorOnly 100 `*('*
-%/token OperatorOnly 100 `*)'*
-%/token OperatorOnly 100 `*['*
-%/token OperatorOnly 100 `*]'*
-%/token OperatorOnly 100 `*{'*
-%/token OperatorOnly 100 `*}'*
+%/token OperatorOnly 100 `*\('*
+%/token OperatorOnly 100 `*\)'*
+%/token OperatorOnly 100 `*\['*
+%/token OperatorOnly 100 `*\]'*
+%/token OperatorOnly 100 `*\{'*
+%/token OperatorOnly 100 `*\}'*
 # in next line should say what is in, not out FIXME
-%/token OperatorOnly 100 `*[^a-zA-Z0-9()[\]{}%]+'*
-%%/token OperatorOnly 100 `*[^a-zA-Z0-9()[\]{}%]+'*
+%/token OperatorOnly 100 `*[^ a-zA-Z0-9()[\]{}%#]+'*
+#%%/token OperatorOnly 100 `*[^a-zA-Z0-9()[\]{}%]+'*
 %/token MCTcmd 100 %\^(.*\n)*.*
 %/token OperatorOnly 100 `*_'*
 %/token OperatorOnly 100 ``+[a-zA-Z][_a-zA-Z0-9]*'*
-%/token OperatorOnly 100 `*('*
-%/token OperatorOnly 100 `*('*
-x + y = 2
+%/token OperatorOnly 100 `*\('*
+%/token OperatorOnly 100 `*\('*
+x + y =2
