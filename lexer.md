@@ -31,6 +31,7 @@ also return a freeVariable token (thus avoiding the clunky \_).
 as an identifier.
 * String. Between 2 double-quotes with backslash escapes.
 * Number. Digits then optionally a dot and one or more digits.
+* Atom. Dot, then letters and digits.
 
 Programmers supply a non-negative decimal priority when adding token types, used only for its 
 ordering (as in the Dewey-decimal library system). The lexer will check for matches in descending 
