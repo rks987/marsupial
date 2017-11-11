@@ -22,7 +22,8 @@ digit be 4.
 * %^ to EOL arrives as a single token of type MCTcmd. Currently defined: 
   * %^import package -- which import operators and identifiers.
   * %^operator ... -- which creates new operators
-* 
+* %{ to }%, multiline, is an MCTexpr that is compile time code (currently python3) that 
+needs to produce an AST to slot in its location. 
 
 [Otherwise % treated like anything else, but the system library it also goes 
 up a level: %(...) accesses up a level (closure templating),
