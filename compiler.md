@@ -70,3 +70,21 @@ The op-output converts the result of the adjustment specified by the first subop
 All this is happening at MCTL level. So when I say "converts tuple to list" that means it is code that takes the tuple AST and changes it into a call AST with the original becoming the 2nd part of the argument, and the AST for the convert function being the first part.
 
 The same operator can have multiple meanings. It can have prefix and suffix forms. And, in either case, it can have multiple meanings based on subsequent mandatory suboperators as long as everything is the same up to that point. For example we have the list constructor \[1 2 3 4], but also the division of a list into head and tail \[1 | \[2 3 4]] (which = \[1 2 3 4]). In Wombat itself the procedure implementing an operator can be accessed as $operator\["\[" () "]"] and $operator\["\[" () "|"] where the list is of Union\[Unit String], with the units being where operands go. The strings are mandatory suboperators, with enough given to identify the operator.
+
+-------------------------------------------------------------------------
+more stuff to incorporate:
+We allow overlap between operators as long as they can be read from
+left to right: we don't have to go back and reparse what we've seen.
+Brackets are an example. We want 3 operators defined:
+%^operator "..." \["\["] ["]"]
+%^operator "..." \["\["] () \[" ",repeating] () ["]"]
+%^operator "..." \["\["] () \["|"] () ["]"]
+
+Note that we allow there to be 2 operators with/without an operand
+in left position, and after each mandatory subop, but not on the right
+because that would lead to unsolvable ambiguity.
+
+Note also that mandatory subops can't have subsubs (including mandatory
+subops in subsubs). That's because (a) you get the same effect by moving
+the subsubs up to follow the mandatory; and (b) it would then cause confusion
+when comparing operators for compatibility.

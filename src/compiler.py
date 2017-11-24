@@ -8,7 +8,8 @@ import utility as U
 
 import moperator as op # build and parse operators
 import re
-operatorRE = re.compile(r'\s*"((?:[^\\"]|\\.)+)"\s+"((?:[^\\"]|\\.)+)"\s+([^\n]+)\n?$')
+
+operatorRE = re.compile(r'\s*"((?:[^\\"]|\\.)+)"\s+([^\n]+)\n?$')
 
 # pairGen takes a generator and returns a generator that produces
 # pairs (current,next), and also allows the return from the yield
@@ -50,7 +51,7 @@ def doMCTcmd(cmd):
     if 'operator '==cmd[0:9]:
         mo = operatorRE.match(cmd[9:])
         if mo:
-            op.doOperatorCmd(U.unquote(mo[1]),U.unquote(mo[2]),mo[3])
+            op.doOperatorCmd(U.unquote(mo[1]),mo[2])
         else: 
             U.die("invalid operator decl: "+cmd,*tok.location)
     elif 'defaultOperand '==cmd[0:15]:
@@ -79,7 +80,7 @@ def getExpr(tokPairs,left,prio,sopsExpected,upAst):
 
 def compiler(tokenGen):
     global tokPairs = pairGen(tokenGen)
-    doMCTcmd('operator "!!SOF" "m.builtin[\'id\']" ["!!SOF"] () ["!!EOF"]')
+    doMCTcmd('operator "m.builtin[\'id\']" ["!!SOF"] () ["!!EOF"]')
     return getExpr(tokPairs,None,0,[],None)
 
 if __name__=="__main__":
