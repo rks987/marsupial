@@ -88,3 +88,11 @@ Note also that mandatory subops can't have subsubs (including mandatory
 subops in subsubs). That's because (a) you get the same effect by moving
 the subsubs up to follow the mandatory; and (b) it would then cause confusion
 when comparing operators for compatibility.
+
+
+---------------------------------------------------------------------
+Rethinking:
+
+Suppose getExpr also returns the subop that terminated it, or None if it met a lower
+left precedence from a potentially trailing subop. Now we can (a) complete the SubOps
+list if None returned, or fill in opt/rept subops till we get to the returned one.

@@ -16,10 +16,13 @@
 # in next line should say what is in, not out FIXME
 %/token OperatorOnly 100 `*[^ a-zA-Z0-9()[\]{}%#]+'*
 #%%/token OperatorOnly 100 `*[^a-zA-Z0-9()[\]{}%]+'*
-%/token MCTcmd 100 %\^[^\n]*\n
+%/token MCTcmd 100 %\^[^\n]*\n?
 %/token OperatorOnly 100 `*_'*
 %/token OperatorOnly 100 ``+[a-zA-Z][_a-zA-Z0-9]*'*
 %/token OperatorOnly 100 `*\('*
 %/token OperatorOnly 100 `*\('*
+%^operator "A" ["["] ["]"]
+%^operator "B" ["["] () [" " repeating] () ["]"]
+%^operator "C" ["["] () ["|"] () ["]"]
 x + y =2
     indent = true

@@ -27,6 +27,14 @@ import decimal
 # a proper subop, but "" (which occurs when lexer puts in a break, but there are
 # no spaces) cannot.
 
+# FIXME: there should be severe restrictions on what subops can be used in subsubs.
+# Probably shouldn't allow any that are used (active?) in the parent(etc).
+
+# Note, when a subop has subsubs then: (a) it must be in again as the first subsub,
+# but set as mandatory (whatever it is at a higher level). The adjust ast in
+# the subsub applies to the immediately following param, but the adjust param
+# at the higher level applies to the subop combined with all the subsusbs
+ 
 OpInfo = C.namedtuple('OpInfo','left,astFun,subops')
  
 SSparam = C.namedtuple('SSparam','precedence,oneAdjust,subsubs')
@@ -43,7 +51,7 @@ def getKeyTuple(subops):
     kt0 = () # zero tuple
     if subops[0].occur=="mandatory":
         if subops[0].v['param']!=None: # funny place to put this check
-            assert subops[0].v['param'].subsubs==None
+    v        assert subops[0].v['param'].subsubs==None
         kt0 = (subops[0].subop,) # 1-tuple
         if len(subops)>1 and subops[0].v['param']==None:
             kt0 = (subops[0].subop,None)
@@ -106,6 +114,11 @@ def insertOp(whichDict, opInfo):
             whichDict[curKey].append(opKey) # add ourselves to list
         curKey = curKey[:-1] # truncate
 
+def mctlEval(s):
+    if s==None: return None
+    rslt = eval(s)
+    assert callable(rslt) or isinstance(rslt,A.AstNode)
+
 # operators are defined by enough mandatory subops (incl op).
 # So the key is a list of subop strings. The value is a list of follow 
 # on (mandatory) subops, and opInfo which is null when the list of follow ons
@@ -144,7 +157,7 @@ def genSopSpec(fromRE):
             if mss.group("occur"): occur = mss.group("occur")
             yield SSsubop(subop=U.unquote(mss.group("subop")),
                           occur=occur,
-                          allAdjust=U.unquote(mss.group("allAdjust")),
+                          allAdjust=mctlEval(U.unquote(mss.group("allAdjust"))),
                           v=dict(param=None,
                           nextMandatory=None,
                           nextPossibles=None)
@@ -153,7 +166,7 @@ def genSopSpec(fromRE):
             assert re.match(r'\s*\(',mss[0])!=None
             pT = mss.group("precedence")
             yield SSparam(precedence=None if pT==None else decimal.Decimal(pT),
-                          oneAdjust=U.unquote(mss.group("oneAdjust")),
+                          oneAdjust=mctlEval(U.unquote(mss.group("oneAdjust"))),
                           subsubs=getSopSpec(mss.group("subsubs")))
 
 # ssPair takes a iter of sops and operands without repeating operands,
@@ -183,21 +196,23 @@ def ssPair(sopAndParam):
 # if none; and (2) the list of all possible subops that might come up
 # next (since these override operator declarations) [the last of these
 # will be the next mandatory if there is one].
-def getManPos(sopSpec,i):
+def getMandPoss(sopSpec,i):
     if i==len(sopSpec):
         return None,[] # nextMandatory,possibles
-    nextNextMan,nextPoss = getManPos(sopSpec,i+1)
+    nextNextMan,nextPoss = getMandPoss(sopSpec,i+1)
     p = sopSpec[i].v['param']
     if p and p.subsubs: # have subsubs
-        subNextMan,subPoss = getManPos(p.subsubs,0) # hmm, doing twice
+        subNextMan,subPoss = getMandPoss(p.subsubs,0) # hmm, doing twice
         sopSpec[i].v['nextMandatory'] = subNextMan if subNextMan!=None else nextNextMan
-        sopSpec[i].v['nextPossibles'] = subPoss + nextPoss
+        #sopSpec[i].v['nextPossibles'] = subPoss + nextPoss
+        sopSpec[i].v['nextPossibles'] = subPoss if subNextMan!=None else subPoss + nextPoss
     else:
         sopSpec[i].v['nextMandatory'] = nextNextMan
         sopSpec[i].v['nextPossibles'] = nextPoss
     if sopSpec[i].occur=='mandatory':
         return sopSpec[i].subop,[sopSpec[i].subop] # just me
-    return sopSpec[i].v['nextMandatory'], \
+    else:
+        return sopSpec[i].v['nextMandatory'], \
            [sopSpec[i].subop]+sopSpec[i].v['nextPossibles']
 
 
@@ -212,7 +227,7 @@ def getSopSpec(sopSpecText):
         sopSpec = [*ssPair(iter(sopSpecUnpaired))]
     # now need to add to each parameter, the list of possible nextSop
     # and the next mandatory if there is no precedence.
-    nextMandatory,possibles = getManPos(sopSpec,0)
+    nextMandatory,possibles = getMandPoss(sopSpec,0) # result not needed - sopSpec modified
     return left,sopSpec
 
 def doOperatorCmd(astFun,sopSpecText):
@@ -221,7 +236,7 @@ def doOperatorCmd(astFun,sopSpecText):
     # sopSpec: see compiler.md
     left,sopSpec = getSopSpec(sopSpecText)
     insertOp((withLeft if left else noLeft),
-             OpInfo(left=left,astFun=astFun,subops=sopSpec))
+             OpInfo(left=left,astFun=mctlEval(astFun),subops=sopSpec))
 
 if __name__=="__main__":
     #import lexer
