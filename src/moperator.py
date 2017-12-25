@@ -12,6 +12,7 @@
 
 import collections as C
 import utility as U
+import mast as A
 import re
 import decimal
 
@@ -35,9 +36,9 @@ import decimal
 # the subsub applies to the immediately following param, but the adjust param
 # at the higher level applies to the subop combined with all the subsusbs
  
-OpInfo = C.namedtuple('OpInfo','left,astFun,subops')
+OpInfo = C.namedtuple('OpInfo','left,astFun,paramLen,subops') # if left!=None it has pos==0
  
-SSparam = C.namedtuple('SSparam','precedence,oneAdjust,subsubs')
+SSparam = C.namedtuple('SSparam','precedence,pos,oneAdjust,ssParamLen,subsubs')
 SSsubop = C.namedtuple('SSsubop',
                        'subop,occur,allAdjust,v')
                        # v a dict with param,nextMandatory,nextPossibles
@@ -47,11 +48,11 @@ withLeft = {}
 
 def getKeyTuple(subops):
     # the key is the mandatory subops, plus None added after subops with no param
-    # However strip a trailing None, since can't have withRigh and noRight variants
+    # However strip a trailing None, since can't have withRight and noRight variants
     kt0 = () # zero tuple
     if subops[0].occur=="mandatory":
         if subops[0].v['param']!=None: # funny place to put this check
-    v        assert subops[0].v['param'].subsubs==None
+            assert subops[0].v['param'].subsubs==None
         kt0 = (subops[0].subop,) # 1-tuple
         if len(subops)>1 and subops[0].v['param']==None:
             kt0 = (subops[0].subop,None)
@@ -97,6 +98,9 @@ def insertOp(whichDict, opInfo):
     opKey = getKeyTuple(opInfo.subops)
     assert opKey not in whichDict # overlap
     whichDict[opKey] = opInfo
+    if len(opKey)==1:
+        whichDict[opKey[0]] = opInfo
+        return
     # now we must work backwards, creating links and checking compatibility
     # We only need to check compatibility once, since existing operators
     # are compatible with each other.
@@ -112,19 +116,22 @@ def insertOp(whichDict, opInfo):
                 checkCompat(whichDict[opKey],whichDict[whichDict[curKey][0]])
                 compatChecked = True
             whichDict[curKey].append(opKey) # add ourselves to list
+        if len(curKey)==1:
+            whichDict[curKey[0]] = whichDict[curKey] # HACK
         curKey = curKey[:-1] # truncate
 
 def mctlEval(s):
     if s==None: return None
     rslt = eval(s)
-    assert callable(rslt) or isinstance(rslt,A.AstNode)
+    assert rslt==None or callable(rslt) or isinstance(rslt,A.AstNode)
+    return rslt
 
 # operators are defined by enough mandatory subops (incl op).
 # So the key is a list of subop strings. The value is a list of follow 
 # on (mandatory) subops, and opInfo which is null when the list of follow ons
 # has more than one entry.
 
-# The opInfo entries have:
+# The opInfo entries have: This is WRONG FIXME
 #  'opDefine' is the list of mandatory ops that define us
 #  'allMandatory' is the complete list of top level mandatory
 #  'left' is the operand spec, None if in noLeft
@@ -133,7 +140,7 @@ def mctlEval(s):
 sopSpecRE = re.compile(r'''
     (?: # we have subops in []s and params in ()s. This covers the [] case
         \[ 
-            \s*(?P<subop>"(?:[^\\"]|\\.)+") # the subop is in "s
+            \s*(?P<subop>"(?:[^\\"]|\\.)*") # the subop is in "s
             (?:\s*(?P<occur>mandatory|optional|repeating))? # occur optional
             (?:\s*(?P<allAdjust>"(?:[^\\"]|\\.)+"))? # adjust optional
         \s*\] # maybe whitespace before ]
@@ -149,6 +156,7 @@ sopSpecRE = re.compile(r'''
 def genSopSpec(fromRE):
     # should check there is no bad stuff: end of each should go with 
     # start of next FIXME
+    pos = 0
     for mss in fromRE:
         #assert mss.group('badSpec')==None # should die FIXME
         if mss.group("subop"):
@@ -165,22 +173,28 @@ def genSopSpec(fromRE):
         else:
             assert re.match(r'\s*\(',mss[0])!=None
             pT = mss.group("precedence")
+            dummyLeft,subsubs,ssParamLen=getSopSpec(mss.group("subsubs"))
             yield SSparam(precedence=None if pT==None else decimal.Decimal(pT),
+                          pos=pos,
                           oneAdjust=mctlEval(U.unquote(mss.group("oneAdjust"))),
-                          subsubs=getSopSpec(mss.group("subsubs")))
+                          ssParamLen=ssParamLen,
+                          subsubs=subsubs)
+            pos = pos+1
 
 # ssPair takes a iter of sops and operands without repeating operands,
 # and generates one yield per sop, with the operand set to None if no
 # following operand.
 def ssPair(sopAndParam):
     sop = next(sopAndParam,None)
-    assert sop!=None and type(sop) is SSsubop
+    assert (sop!=None) and (type(sop) is SSsubop)
     while True:
         nxt = next(sopAndParam,None)
         if nxt!=None and type(nxt) is SSparam: # normal case
             sop.v['param'] = nxt
+            #sop.v['pos'] = nxt.pos
             yield sop
             sop = next(sopAndParam,None)
+            if sop==None: return
         elif nxt==None:
             sop.v['param'] = None
             yield sop
@@ -196,13 +210,14 @@ def ssPair(sopAndParam):
 # if none; and (2) the list of all possible subops that might come up
 # next (since these override operator declarations) [the last of these
 # will be the next mandatory if there is one].
-def getMandPoss(sopSpec,i):
+def getMandPoss(sopSpec,i,pLen):
     if i==len(sopSpec):
-        return None,[] # nextMandatory,possibles
-    nextNextMan,nextPoss = getMandPoss(sopSpec,i+1)
+        return None,[],pLen # nextMandatory,possibles
+    nextNextMan,nextPoss,pLen = getMandPoss(sopSpec,i+1,pLen)
     p = sopSpec[i].v['param']
-    if p and p.subsubs: # have subsubs
-        subNextMan,subPoss = getMandPoss(p.subsubs,0) # hmm, doing twice
+    if p!=None: pLen = max(p.pos+1,pLen)
+    if p!=None and p.subsubs: # have subsubs
+        subNextMan,subPoss,ssParamLen = getMandPoss(p.subsubs,0,0) # hmm, doing twice
         sopSpec[i].v['nextMandatory'] = subNextMan if subNextMan!=None else nextNextMan
         #sopSpec[i].v['nextPossibles'] = subPoss + nextPoss
         sopSpec[i].v['nextPossibles'] = subPoss if subNextMan!=None else subPoss + nextPoss
@@ -210,14 +225,14 @@ def getMandPoss(sopSpec,i):
         sopSpec[i].v['nextMandatory'] = nextNextMan
         sopSpec[i].v['nextPossibles'] = nextPoss
     if sopSpec[i].occur=='mandatory':
-        return sopSpec[i].subop,[sopSpec[i].subop] # just me
+        return sopSpec[i].subop,[sopSpec[i].subop],pLen # just me
     else:
         return sopSpec[i].v['nextMandatory'], \
-           [sopSpec[i].subop]+sopSpec[i].v['nextPossibles']
+           [sopSpec[i].subop]+sopSpec[i].v['nextPossibles'],pLen
 
 
 def getSopSpec(sopSpecText):
-    if sopSpecText==None: return None # for subsubs only
+    if sopSpecText==None: return None,None,None # for subsubs only
     sopSpecUnpaired = [*genSopSpec(re.finditer(sopSpecRE,sopSpecText))]
     if sopSpecText[0]=='(': # never for subsub
         left = sopSpecUnpaired[0]
@@ -227,21 +242,22 @@ def getSopSpec(sopSpecText):
         sopSpec = [*ssPair(iter(sopSpecUnpaired))]
     # now need to add to each parameter, the list of possible nextSop
     # and the next mandatory if there is no precedence.
-    nextMandatory,possibles = getMandPoss(sopSpec,0) # result not needed - sopSpec modified
-    return left,sopSpec
+    nextMandatory,possibles,pLen = getMandPoss(sopSpec,0,(1 if left!=None else 0))
+    return left,sopSpec,pLen
 
 def doOperatorCmd(astFun,sopSpecText):
     # op is the operator being defined = first sop
     # astFun is compile time code (python3) generating an AST for the procedure
     # sopSpec: see compiler.md
-    left,sopSpec = getSopSpec(sopSpecText)
+    left,sopSpec,pCnt = getSopSpec(sopSpecText)
     insertOp((withLeft if left else noLeft),
-             OpInfo(left=left,astFun=mctlEval(astFun),subops=sopSpec))
+             OpInfo(left=left,astFun=mctlEval(astFun),paramLen=pCnt,subops=sopSpec))
 
 if __name__=="__main__":
     #import lexer
-    doOperatorCmd("A",'["["] ["]"]')
-    doOperatorCmd("B",'["["] () [" " repeating] () ["]"]')
-    doOperatorCmd("C",'["["] () ["|"] () ["]"]')
+    doOperatorCmd( "A.callOp", '(100) [" "] (100)')
+    doOperatorCmd("A.zeroTuple",'["["] ["]"]')
+    doOperatorCmd("A.zeroTuple",'["["] () [" " repeating] () ["]"]')
+    doOperatorCmd("A.zeroTuple",'["["] () ["|"] () ["]"]')
     print(noLeft)
 

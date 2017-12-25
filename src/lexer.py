@@ -2,7 +2,7 @@
 
 import collections as C
 
-Token = C.namedtuple('Token',['token','tokType','indent','whiteB4','location'])
+Token = C.namedtuple('Token',['token','tokenType','indent','whiteB4','location'])
 
 import utility as U
 import re
@@ -12,21 +12,21 @@ upSlash = re.compile(r"\%\/")
 import decimal
 tokenByPrio = {}  # for each token priority, list of pat*patType
 tokenPrios = []   # keep sorted list of Prios, 
-def insertToken(tokType, prio, tokRE):
+def insertToken(tokenType, prio, tokRE):
     global tokenPrios
     if prio in tokenByPrio:
-        tokenByPrio[prio].append((tokRE,tokType))
+        tokenByPrio[prio].append((tokRE,tokenType))
     else:
-        tokenByPrio[prio] = [(tokRE,tokType)]
+        tokenByPrio[prio] = [(tokRE,tokenType)]
         tokenPrios = sorted([*iter(tokenByPrio.keys())],reverse=True)
     return
 
 def lexer(fileName):
     lineNum = 0
-    yield Token(token="!!SOF",tokType="fileInfo",indent=0,whiteB4=False,
+    yield Token(token="!!SOF",tokenType="OperatorOnly",indent=0,whiteB4=False,
                location=(fileName,0,0))
     for line in open(fileName, "r", encoding="utf-8"):
-        whiteb4 = True # at a new line
+        whiteB4 = True # at a new line
         lineNum += 1
         indentM = white.match(line)
         indent = len(indentM[0]) # set to -1 after 1st token
@@ -48,7 +48,7 @@ def lexer(fileName):
             while pos!=len(line):
                 found = None
                 for p in tokenPrios:
-                    if found:
+                    if found!=None:
                         break
                     for (pat,patType) in tokenByPrio[p]:
                         tm = pat.match(line,pos)
@@ -62,13 +62,14 @@ def lexer(fileName):
                     if found:
                         wm = white.match(line, pos+len(found[0]))
                         gotWhite = pos+len(found[0])==len(line) or len(wm[0])>0
-                        yield Token(token=found[0],tokType=found[1],indent=indent,
-                               whiteB4=whiteB4, location=(fileName,lineNum,pos))
+                        if found[1]!='Comment':
+                            yield Token(token=found[0],tokenType=found[1],indent=indent,
+                                        whiteB4=whiteB4, location=(fileName,lineNum,pos))
                         whiteB4 = gotWhite
                         indent = -1
                         pos += len(found[0])+len(wm[0])
                     break
-    yield Token(token="!!EOF",tokType="fileInfo",indent=0,whiteB4=True,
+    yield Token(token="!!EOF",tokenType="OperatorOnly",indent=0,whiteB4=True,
                location=(fileName,lineNum+1,0))
     return
 # above is too complicated...FIXME

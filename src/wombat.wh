@@ -21,8 +21,12 @@
 %/token OperatorOnly 100 ``+[a-zA-Z][_a-zA-Z0-9]*'*
 %/token OperatorOnly 100 `*\('*
 %/token OperatorOnly 100 `*\('*
-%^operator "A" ["["] ["]"]
-%^operator "B" ["["] () [" " repeating] () ["]"]
-%^operator "C" ["["] () ["|"] () ["]"]
-x + y =2
-    indent = true
+%^operator "A.callOp" (100) [" "] (200)
+%^operator "A.callOp" (100) [""] (200)
+%^operator "None" ["("] () [")"]
+%^operator "A.AstIdentifier('tuple2list')" ["["] ["]"]
+%^operator "A.AstIdentifier('tuple2list')" ["["] () [" " repeating] () ["]"]
+%^operator "A.AstIdentifier('prependList')" ["["] () ["|"] () ["]"]
+[] [ () ] [() ()]
+#x + y =2
+#    indent = true
