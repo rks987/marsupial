@@ -27,6 +27,6 @@
 %^operator "A.AstIdentifier('tuple2list')" ["["] ["]"]
 %^operator "A.AstIdentifier('tuple2list')" ["["] () [" " repeating] () ["]"]
 %^operator "A.AstIdentifier('prependList')" ["["] () ["|"] () ["]"]
-[] [ () ] [() ()]
+#[] [ () ] [() ()]
 #x + y =2
 #    indent = true

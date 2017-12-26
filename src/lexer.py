@@ -33,7 +33,7 @@ def lexer(fileName):
         pos = indent
         if upSlash.match(line,indent):
             # lex command
-            m = re.compile(r"include\s+(\S+)").fullmatch(line,indent+2)
+            m = re.compile(r"include\s+(\S+)\n?").fullmatch(line,indent+2)
             if m:
                 yield from lexer(m[1])  # recurse
             else:

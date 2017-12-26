@@ -283,7 +283,7 @@ def compiler(toks):
 if __name__=="__main__":
     import lexer
     global ast
-    ast = compiler(lexer.lexer("wombat.wh"))
+    ast = compiler(lexer.lexer("test.w"))
     print(ast)
 
 # DELETED
