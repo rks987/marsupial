@@ -10,24 +10,22 @@
 
 import utility as U
 import mast as A
-import lexer
+import lexer as L
 import moperator as op # build and parse operators
 import collections as C
 import re
 
 operatorRE = re.compile(r'\s*("(?:[^\\"]|\\.)+")\s+([^\n]+)\n?$')
-defaultOperand = None
 
 def doMCTcmd(cmd,tok):
-    global defaultOperand
     if 'operator '==cmd[0:9]:
         mo = operatorRE.match(cmd[9:])
         if mo:
             op.doOperatorCmd(U.unquote(mo[1]),mo[2])
         else: 
             U.die("invalid operator decl: "+cmd,*tok.location)
-    elif 'defaultOperand '==cmd[0:15]:
-        defaultOperand = eval(cmd[15:]) # must be an ASTree
+    #elif 'defaultOperand '==cmd[0:15]:
+    #    defaultOperand = eval(cmd[15:]) # must be an ASTree
     elif 'import '==cmd[0:7]:
         raise Exception("import not implemented -- FIXME")
     elif 'package '==cmd[0:8]:
@@ -36,7 +34,7 @@ def doMCTcmd(cmd,tok):
         raise Exception("export not implemented -- FIXME")
     else:
         U.die("unknown MCTcmd: "+cmd,*tok.location) 
-    return defaultOperand
+    return A.zeroTuple() #?? defaultOperand
 
 # for the function for an operator or various adjustment functions, there
 # are 2 possibilities. Either the function is callable and is applied
@@ -102,10 +100,14 @@ def getExpr(toks,left,prio,opCtx,noneOK):
     #
     # return an ast, and the token generator as possibly modified
     tok = next(toks,None)
-    while (tok.tokenType=='Comment') or (tok.tokenType=='MCTcmd'):
-        if tok.tokenType=='MCTcmd':
-            assert tok.token[0:2]=='%^'
-            doMCTcmd(tok.token[2:],tok)
+    def tokT():
+        return tok.tokTT.text
+    def posOp():
+        return tok.tokTT.tokenType in ['Identifier','OperatorOnly']
+
+    while (tok.tokTT.tokenType=='Comment') or (tok.tokTT.tokenType=='MCTcmd'):
+        if tok.tokTT.tokenType=='MCTcmd':
+            doMCTcmd(tok.tokTT.text,tok)
         tok = next(toks,None)
 
     # we're at the start here - get the relevant opInfo
@@ -113,76 +115,63 @@ def getExpr(toks,left,prio,opCtx,noneOK):
     # In the following: operators last forever and aren't superceded by identifers FIXME
     #
     opDict = None
-    tokPosSubop = posSubop(tok.token,opCtx)
-    if tokPosSubop or ((tok.tokenType in ['identifier','OperatorOnly']) and \
-       (left==None) and (tok.token not in op.noLeft) and (tok.token in op.withLeft)):
+    tokPosSubop = posOp() and posSubop(tokT(),opCtx)
+    if tokPosSubop or (posOp() and (left==None) and (tokT() not in op.noLeft) and \
+                       (tokT() in op.withLeft)):
+        # should have had a left or operand preceding subop
         if tokPosSubop and noneOK: # none it is then
             return None,U.prependGen(tok,toks)
         # better insert defaultOperand
         assert left==None and noneOK==False
-        defaultOperandTok = lexer.Token(token='!!defaultOperand',tokenType='OperatorOnly', \
+        defOperandTok = L.Token(tokTT=L.TokTT(text='!!defaultOperand',tokenType='OperatorOnly'),
                                         indent=None,whiteB4=False,location=tok.location)
         toks = U.prependGen(tok,toks) # backup a bit
-        tok = defaultOperandTok
-        opDict = op.noLeft # must have no right as well
-        assert tok.token in opDict
-    if (tok.tokenType in ['Identifier','OperatorOnly']): # might be an operator
+        tok = defOperandTok
+        opDict = op.noLeft # nb. must have no right as well
+        assert tokT() in opDict
+    if (posOp()): # might be an operator
         opDict = op.withLeft if left!=None else op.noLeft
-        if tok.token in opDict: # run with that
+        if tokT() in opDict: # run with that
             pass # we're happy
-        elif left==None and tok.token in op.withLeft: # maybe we can get a defaultOperand
+        elif left==None and tokT() in op.withLeft: # maybe we can get a defaultOperand
             assert False # already handled this case and inserted defaultOperand
-        elif left!=None: # didn't find something to pick it up, insert " " or ""
+        elif left!=None: # didn't find something to pick it up, insert " " or "" (sub)op
             toks = U.prependGen(tok,toks) # backup a bit
-            tok = lexer.Token(token=(" " if tok.whiteB4 else ""),tokenType='OperatorOnly', \
+            tok = L.Token(tokTT=L.TokTT(text=(" " if tok.whiteB4 else ""),
+                                        tokenType='OperatorOnly'),
                           indent=-1,whiteB4=False,location=tok.location)
             opDict = op.withLeft # must have a right as well
-            assert tok.token in opDict
+            assert tokT() in opDict
         else:
-            assert left==None and tok.token not in op.noLeft
+            assert left==None and tokT() not in op.noLeft
             # must be an existing identifier (or free identifier?)
             opDict = None
     if opDict==None:
-        if tok.tokenType in ['String','Number','Atom']:
-            return A.AstConstant(const=tok.token)
-        #assert tok.tokenType in ['Identifier','NewIdentifier','FreeVariable','NewFreeVariable']
-        if tok.tokenType=='Identifier':
-            iden = tok.token
-            IdClass = A.AstIdentifier
-        elif tok.tokenType == 'NewIdentifier':
-            IdClass = A.AstNewIdentifier
-            iden = tok.token[1:] # HACK FIXME
-            assert tok.token[0]=='`'
-        elif tok.tokenType == 'FreeVariable':
-            IdClass = A.AstFreeVariable
-        elif tok.tokenType == 'NewFreeVariable':
-            IdClass = A.AstNewFreeVariable
-            iden = tok.token[1:] # HACK FIXME
-            assert tok.token[0]=='`'
-        else:
-            assert False
-        return IdClass(identifier=iden),toks
+        if tok.tokTT.tokenType in ['String','Number','Atom']:
+            return A.AstConstant(const=tokT(),constType=tok.tokTT.tokenType)
+        #assert tok.tokTT.tokenType in ['Identifier','NewIdentifier',
+        #'FreeVariable','NewFreeVariable']
+        IdClasses = {'Identifier': A.AstIdentifier, 'NewIdentifier':A.AstNewIdentifier,
+                     'FreeVariable':A.AstFreeVariable, 'NewFreeVariable':A.AstNewFreeVariable}
+        return IdClasses[tok.tokTT.tokenType](identifier=tokT()), toks
     # here ends interlude of special cases: back to operators
 
     # at this point we are ready to start chewing up subops. It's exactly like subsubs,
     # except that ...
-    oiL = [opDict[tok.token]] if isinstance(opDict[tok.token],op.OpInfo) else \
-                                [opDict[t] for t in opDict[tok.token]]
+    oiL = [opDict[tokT()]] if isinstance(opDict[tokT()],op.OpInfo) else \
+                                [opDict[t] for t in opDict[tokT()]]
     # in next line, want to reprocess op = 1st subop
     opInfo,pAsts,toks = getSubops(toks=U.prependGen(tok,toks),\
                                   opCtx=OpCtx(upOpCtx=opCtx,indx=0,altOpInfos=oiL))
-    #if opInfo.left!=None and isinstance(rAsts,A.AstNode):
-    #    pAsts = [left,rAsts]
     if opInfo.left!=None: # rAsts is a list of multiple params
         pAsts[0] = left # add in left param
-    #elif opInfo.left==None:
-    #    pAsts = rAsts
     ast = opFun(opInfo.astFun,pAsts)
     # at this point the next tok might be a nextPos for our parent, otherwise we've
     # got a left and we should keep looking
     tok = next(toks,None)
-    if tok==None or posSubop(tok.token,opCtx):
+    if tok==None or posSubop(tokT(),opCtx):
         return ast,U.prependGen(tok,toks)
+    # only option now is that what we have is a left operand for what follows
     expr,toks = getExpr(toks=U.prependGen(tok,toks),left=ast,prio=prio,opCtx=opCtx,noneOK=False)
     return expr,toks
 
@@ -191,8 +180,10 @@ def getExpr(toks,left,prio,opCtx,noneOK):
 # have pushed back the token that has lower left precedence than our right precedence.
 def getSubops( toks,opCtx):
     tok = next(toks,None)
+    def tokT():
+        return tok.tokTT.text
     maxPL = max((oi.paramLen for oi in opCtx.altOpInfos))
-    pAstL = [None]*maxPL # list for param ast (might be truncated)
+    pAstL = [None]*maxPL # list for param ast (might be truncated at the end)
     indx = 0  # this is the index into each list in oiL
     oiL = opCtx.altOpInfos[:] # take a copy
     while True:
@@ -200,14 +191,13 @@ def getSubops( toks,opCtx):
         # delete the entries in oiL that do. Of course for the start of a top level
         # we will have it because that's how we got here at all.
         oiL = [oiL[i] for i in range(len(oiL)) if oiL[i].subops[indx].occur!='mandatory' or \
-                                                  oiL[i].subops[indx].subop==tok.token]
+                                                  oiL[i].subops[indx].subop==tokT()]
         assert oiL!=[]
         if len(oiL[0].subops)-1==indx and oiL[0].subops[indx].v['param']==None:
             # note: this special case shouldn't be needed check/FIXME
             # the trailing subop has no right
             assert len(oiL)==1 # can't have a competitor for this!
             assert oiL[0].subops[indx].occur=='mandatory'
-            #assert pAstL[-1]==[]
             return oiL[0],pAstL[:oiL[0].paramLen],toks
         numMandatory = len([i for i in range(len(oiL)) \
                                 if oiL[i].subops[indx].occur=='mandatory'])
@@ -215,13 +205,12 @@ def getSubops( toks,opCtx):
         # while it is mandatory in a competing one? For the moment say no. Doc it FIXME
         assert numMandatory==0 or numMandatory==len(oiL) # all in sync.
         # They all have to agree on optional and repeat params, so we can just advance
-        # indx till we hit tok, awhile True' - get more missing/optional tokens
-        # so now we'll append an empty list to pAstL to get params for this sop (if any)
+        # indx till we hit tok
         sopPs = [] # put values for next sop here (might be repeating)
         while True:
             # come back here till past this sop
             nextSop = oiL[0].subops[indx] # all same - deleted different mandatory from oiL
-            if nextSop.subop!=tok.token: # finished repeat
+            if nextSop.subop!=tokT(): # finished repeat
                 if nextSop.v['param']==None: 
                     assert len(sopPs)==0
                 elif nextSop.occur=='mandatory':
@@ -267,9 +256,6 @@ def getSubops( toks,opCtx):
         indx = indx+1
         if indx==len(oiL[0].subops): # at end
             assert len(oiL)==1
-            #if oiL[0].subops[-1].v['param']==None:
-            #    assert pAstL[-1]==[]
-            #    pAstL = pAstL[:-1] # never do this FIXME
             return oiL[0],pAstL[:oiL[0].paramLen],U.prependGen(tok,toks)
 
 def compiler(toks):
@@ -283,80 +269,5 @@ def compiler(toks):
 if __name__=="__main__":
     import lexer
     global ast
-    ast = compiler(lexer.lexer("test.w"))
+    ast = compiler(L.lexer("test.w"))
     print(ast)
-
-# DELETED
-        
-#    global tok # so I don't have to pass the filename/line/pos everywhere
-#    (tok,nextTok) = next(tokPairs,None)
-#    if tok.tokenType=='MCTcmd':
-#   assert tok.token[0:1]=='%^'
-#   doMCTcmd(tok.token[2:])
-#        return defaultOperand # unit=() in wombat
-#    # we're at the start here - get the relevant opInfo
-#    opDict = op.withLeft if left else op.noLeft
-#    if tok in opDict: # run with that
-#        tokPairs.send(None) # we're happy
-#        pass # ???
-#    elif left==None and tok in op.withLeft: # maybe we can get a defaultOperand
-#        (tok,nextTok) = tokPairs.send(defaultOperand,None) # backup a bit
-#    elif left!=None: # didn't find something to pick it up, insert " " or ""
-#    pass
-    
-
-# pairGen takes a generator and returns a generator that produces
-# pairs (current,next), and also allows the return from the yield
-# to insert into either the current or next value. The tricky thing
-# is that the callers send gets the next yield, but we just yield None
-# when there is no change.
-#def pairGen(gen):
-#    cur = None
-#    nexty = gen.next()
-#    saveNexty = None
-#    while True:
-#   ret = yield (cur,nexty) # goes to next, reurns on send
-#        if nexty==None:
-#            assert ret==None # don't allow changes at end
-#            return
-#   if ret == None:
-#       toSend = None
-#   elif ret == (newCur,None)
-#       saveNexty = nexty
-#            nexty = cur
-#       cur = newCur
-#       toSend = (cur,nexty)
-#   elif ret == (None,newNext)
-#       saveNexty = nexty
-#       nexty = newNext
-#       toSend = (cur,nexty)
-#        else:
-#            assert False
-#        yield toSend #response to send
-#        if saveNexty != None:
-#            cur = nexty
-#            nexty = saveNexty
-#            saveNexty = None
-#        else:
-#            cur = nexty
-#            nexty = next(gen,None) # set to None at end of gen
-#
-#def iterBackup(gen): # maybe we don't need lookahead?
-#    save = None
-#    while True:
-#        if save==None:
-#            save = next(gen,None)
-#            if save==None: return
-#        ret = yield save
-#        if ret==None:
-#            save = None
-#            continue
-#        else:
-#            yield ret
-#            continue # will yield save again
-#
-#def prependBackup(hd,tl):
-#    yield hd
-#    assert None==toksBackup.send(None)
-#    yield from tl
-

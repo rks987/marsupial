@@ -1,32 +1,46 @@
-%/token Comment 100 #.*
+%/token Comment 100 #(?P<token>.*)
 # wombat.wh
-%/token FreeVariable 100 _[a-zA-Z0-9]+'*
-%/token NewFreeVariable 100 `_[a-zA-Z0-9]+'*
-%/token Identifier 100 [a-zA-Z][_a-zA-Z0-9]*'*
-%/token NewIdentifier 100 `[a-zA-Z][_a-zA-Z0-9]*'*
-%/token String 100 "(\\"|\\\\|[^"\\])*"
-%/token Number 100 [0-9]+(\.[0-9]+)?
-%/token Atom 100 \.[a-zA-Z0-9]+
-%/token OperatorOnly 100 `*\('*
-%/token OperatorOnly 100 `*\)'*
-%/token OperatorOnly 100 `*\['*
-%/token OperatorOnly 100 `*\]'*
-%/token OperatorOnly 100 `*\{'*
-%/token OperatorOnly 100 `*\}'*
+%/token FreeVariable 100 _(?P<token>[a-zA-Z0-9]+'*)
+%/token NewFreeVariable 100 `_(?P<token>[a-zA-Z0-9]+'*)
+%/token Identifier 100 (?P<token>[a-zA-Z][_a-zA-Z0-9]*'*)
+%/token NewIdentifier 100 `(?P<token>[a-zA-Z][_a-zA-Z0-9]*'*)
+%/token String 100 "unquote" (?P<token>"(\\"|\\\\|[^"\\])*")
+%/token Number 100 (?P<token>[0-9]+(\.[0-9]+)?)
+%/token Atom 100 \.(?P<token>[a-zA-Z0-9]+)
+%/token OperatorOnly 100 (?P<token>`*\('*)
+%/token OperatorOnly 100 (?P<token>`*\)'*)
+%/token OperatorOnly 100 (?P<token>`*\['*)
+%/token OperatorOnly 100 (?P<token>`*\]'*)
+%/token OperatorOnly 100 (?P<token>`*\{'*)
+%/token OperatorOnly 100 (?P<token>`*\}'*)
 # in next line should say what is in, not out FIXME
-%/token OperatorOnly 100 `*[^ a-zA-Z0-9()[\]{}%#]+'*
+%/token OperatorOnly 100 (?P<token>`*[^ `'.a-zA-Z0-9()[\]{}%#]+'*)
 #%%/token OperatorOnly 100 `*[^a-zA-Z0-9()[\]{}%]+'*
-%/token MCTcmd 100 %\^[^\n]*\n?
-%/token OperatorOnly 100 `*_'*
-%/token OperatorOnly 100 ``+[a-zA-Z][_a-zA-Z0-9]*'*
-%/token OperatorOnly 100 `*\('*
-%/token OperatorOnly 100 `*\('*
+%/token MCTcmd 100 %\^(?P<token>[^\n]*)\n?
+%/token MCTast 100 %\{(?P<token>.*)%\}
+%/token OperatorOnly 100 (?P<token>`*_'*)
+%/token OperatorOnly 100 (?P<token>``+[a-zA-Z][_a-zA-Z0-9]*'*)
+
+# The following should be in an import rather than include...
+
+#`MCTtuple = %{ MCT.Mtuple %};
+#
+#`TupleB = behaviour 
+#    { $=(`Tuple:Type,`how);
+#      `nb=Tuple.behaviours(TupleB)how; 
+#      [ .properties->Struct[], .axioms->[]
+
 %^operator "A.callOp" (100) [" "] (200)
 %^operator "A.callOp" (100) [""] (200)
 %^operator "None" ["("] () [")"]
 %^operator "A.AstIdentifier('tuple2list')" ["["] ["]"]
-%^operator "A.AstIdentifier('tuple2list')" ["["] () [" " repeating] () ["]"]
+%^operator "A.AstIdentifier('tuple2list')" ["[" "A.first2rest"] () [" " repeating] () ["]"]
 %^operator "A.AstIdentifier('prependList')" ["["] () ["|"] () ["]"]
-#[] [ () ] [() ()]
-#x + y =2
-#    indent = true
+
+#    `fact = { case $:Nat of [
+#                { $ = 0; 1}
+#                { $ = `n >? 0; n*fact(n-1)}
+#              ]
+#            };
+#
+#    6 = fact `x; print x

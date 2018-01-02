@@ -253,6 +253,13 @@ def doOperatorCmd(astFun,sopSpecText):
     insertOp((withLeft if left else noLeft),
              OpInfo(left=left,astFun=mctlEval(astFun),paramLen=pCnt,subops=sopSpec))
 
+# first2rest is a common allAdjust parameter, used where we put the first part
+# of a tuple operand, then have the rest as a repeating operand.
+def first2rest(tup):
+    assert isinstance(tup,AstTuple)
+    if len(tup.members)<2: return tup
+    return AstTuple(members=[tup[0],*tup[1]]) # called be parent/closure set
+
 if __name__=="__main__":
     #import lexer
     doOperatorCmd( "A.callOp", '(100) [" "] (100)')

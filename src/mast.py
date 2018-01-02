@@ -95,10 +95,23 @@ class AstCall(AstNode):
 def callOp(procAndParam):
     return AstCall(procParam=AstTuple(members=procAndParam))
 
+# These constants are really wombat not marsupial. FIXME
+# maybe can be Mct"ConstType".fromString(const)
 class AstConstant(AstNode):
-    def __init__(self,const,parent=None,closure=None):
+    def __init__(self,const,constType,parent=None,closure=None):
         self.const = const
+        self.constType = constType
         super().__init__(parent,closure)
     def __str__(self):
         return ' '+self.const+' '
 
+def first2rest(tupNodeOrList):
+    if tupNodeOrList == None: return None # for luck
+    # commonly we have the 1st param seperated where it logically
+    # belongs in with the list of following ones (e.g. comma operator)
+    if isinstance(tupNodeOrList, AstTuple):
+        return AstTuple(members=first2rest(tupNodeOrList.members))
+    # assume is a 2 entry list whose 2nd entry is a list or AstTuple
+    if isinstance(tupNodeOrList[1], AstTuple):
+        return [tupNodeOrList[0]]+tupNodeOrList[1].members
+    return [tupNodeOrList[0]]+tupNodeOrList[1]

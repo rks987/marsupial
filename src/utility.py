@@ -21,6 +21,13 @@ def findDeep(x,it):
         except: # should check for TypeError only? FIXME
             return False
 
+def evalCallable(s): # string s should give a callable, for None return None
+    if s==None: return None
+    rslt = eval(s)
+    assert callable(rslt)
+    return rslt
+
+
 def prependGen(hd,tl):
     yield hd
     yield from tl
