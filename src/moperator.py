@@ -46,6 +46,10 @@ SSsubop = C.namedtuple('SSsubop',
 noLeft = {}
 withLeft = {}
 
+# Really the keys should be based on text,tokenType pairs. This would require
+# some interaction with the lexer. At the moment there is a danger of mistaking
+# an atom or string for an operator by looking at the text and not checking
+# the tokenType. FIXME (big job)
 def getKeyTuple(subops):
     # the key is the mandatory subops, plus None added after subops with no param
     # However strip a trailing None, since can't have withRight and noRight variants
@@ -60,6 +64,12 @@ def getKeyTuple(subops):
         return kt0
     else:
         return kt0+getKeyTuple(subops[1:]) # + is tuple concat
+
+def getZeroOpInfo(whichDict,partkey): # usually just first
+    if isinstance(whichDict[partkey],OpInfo):
+        return whichDict[partkey]
+    else:
+        return whichDict[whichDict[partkey]][0] # return first
 
 def subsubEqual(ss1,ss2):
     if ss1==ss2: return

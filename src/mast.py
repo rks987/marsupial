@@ -10,6 +10,9 @@ class AstNode:
         #return self
     def __str__(self):
         assert False # must be overridden
+    def pp(self,indent):
+        if indent>0: print('\n'+(' '*indent))
+        print(self.__str__())
 
 class AstTuple(AstNode):
     def __init__(self,members,parent=None,closure=None):
@@ -20,6 +23,18 @@ class AstTuple(AstNode):
         rslt = '('
         for x in self.members: rslt = rslt+x.__str__()+','
         return rslt[:-1]+')'
+    def pp(self,indent):
+        if indent>0: print('\n'+(' '*indent))
+        if self.members==[]:
+            print('()')
+        elif len(self.members)==1:
+            print('BOX(')
+            self.members[0].pp(-abs(indent))
+            print(')')
+        else:
+            print('(')
+            for m in self.members: m.pp(abs(indent)+1)
+            print('\n'+(' '*abs(indent))+')')
     def fixUp(self,parent,closure):
         super().fixUp(parent,closure)
         for x in self.members: x.fixUp(self,closure)
@@ -34,12 +49,24 @@ class AstDiscard(AstNode):
     def __str__(self):
         print('_')
 
+def toDiscard(x):
+    return AstDiscard()
+
+def toClosure(exprL): # param should be 1-elt list with closure expr as the 1 elt
+    assert len(exprL)==1 and isinstance(exprL[0],AstNode)
+    return AstClosure(expr=exprL[0])
+
 class AstClosure(AstNode):
     def __init__(self,expr,parent=None,closure=None):
         self.expr = expr
         super().__init__(parent,closure)
     def __str__(self):
-        return '{'+self.expr.pp()+'}'
+        return '{'+self.expr.__str__()+'}'
+    def pp(self,indent):
+        if indent>0: print('\n'+(' '*indent))
+        print('{')
+        self.expr.pp(indent+2 if indent>=0 else -indent+2)
+        print('\n'+(' '*abs(indent))+'}')
     def fixUp(self,parent,closure):
         super().fixUp(parent,closure)
         self.expr.fixUp(self,self) # I am up and closure
@@ -76,14 +103,14 @@ class AstFreeVariable(AstNode):
         self.identifier = identifier
         super().__init__(parent,closure)
     def __str__(self): 
-        return ' '+self.identifier+' '
+        return ' _'+self.identifier+' '
 
 class AstNewFreeVariable(AstNode):
     def __init__(self,identifier,parent=None,closure=None):
         self.identifier = identifier
         super().__init__(parent,closure)
     def __str__(self):
-        return ' `'+self.identifier+' '
+        return ' `_'+self.identifier+' '
 
 class AstCall(AstNode):
     def __init__(self,procParam,parent=None,closure=None):
@@ -91,6 +118,18 @@ class AstCall(AstNode):
         super().__init__(parent,closure)
     def __str__(self):
         return 'CALL'+self.procParam.__str__() # ugly
+    def funct(self):
+        return self.procParam.members[0]
+    def param(self):
+        return self.procParam.members[1]
+    def pp(self,indent):
+        self.funct().pp(indent)
+        print('\n  '+(' '*abs(indent)))
+        self.param().pp(-(abs(indent)+2))
+        print(')')
+    def fixUp(self,parent,closure):
+        super().fixUp(parent,closure)
+        self.procParam.fixUp(self,closure)
 
 def callOp(procAndParam):
     return AstCall(procParam=AstTuple(members=procAndParam))

@@ -1,7 +1,7 @@
 # compiler.py
 
 # A typical token:
-#  {'token': 'true', 'tokenType': 'Identifier', 'indent': -1, 'gotWhite': True, 
+#  {'token': 'true', 'tType': 'Identifier', 'indent': -1, 'gotWhite': True, 
 #   'location': ('src/wombat.wh', 25, 13)}
 
 # FIXME the lexer should return a token with the important characters (e.g. remove
@@ -36,33 +36,24 @@ def doMCTcmd(cmd,tok):
         U.die("unknown MCTcmd: "+cmd,*tok.location) 
     return A.zeroTuple() #?? defaultOperand
 
-# for the function for an operator or various adjustment functions, there
-# are 2 possibilities. Either the function is callable and is applied
-# at compile time, or it is an Ast that will be a run time function.
-# If runtime then we convert the parameter list to a tuple.
-# Note we don't untuple single arguments: do explicitly with adjustment.
-def opFun(fun,astOrL):
+def opFunL(fun,astL):
+    for a in astL: assert isinstance(a,A.AstNode)
     if callable(fun):
-        return fun(astOrL) # whatever it is, fun has to handle it
-    if isinstance(astOrL,A.AstNode):
-        ast = astOrL 
-    else:
-        for a in astOrL: 
-            assert isinstance(a,A.AstNode)
-        ast = A.AstTuple(members=astOrL)
+        return fun(astL)
+    return opFunAst(fun, A.AstTuple(members=astL))
+def opFunAst(fun,pAst):
+    assert isinstance(pAst,A.AstNode)
     if fun==None: 
-        return ast # mostly for adjustment cases, but also ()s
-    if isinstance(fun,A.AstNode):
-        pp = A.AstTuple(members=[fun,ast])
-        return A.AstCall(procParam=pp)
-    else: 
-        assert False
- 
+        return pAst
+    return A.AstCall(procParam=A.AstTuple(members=[fun,pAst]))
+
 # At any point we are a hierarchy of operators. For each operator we are in we are
 # at a position which is a list of indices into the subops, and subsubs, etc.
 # From that position we know (nextPossibles) what the possible proper subops are;
 # and if there is no nextMandatory then we need to also consider the nextPossibles
-# at one layer up.
+# at one layer up.]
+# [NB for following sentence: Currently just have one index, not a list, and handle
+# subsubs by creating a fake context. No testing of subsubs has been done FIXME]
 # opCtx points to current parentCtx and a set of (opInfo, indexList) pairs. If the 
 # token is one of the nextPossibles of 1st pair then (a) fill in opt and rept params up 
 # to that; (b) adjust indexList; (c) if it was mandatory then it must be same as
@@ -75,22 +66,47 @@ def opFun(fun,astOrL):
 OpCtx = C.namedtuple('OpCtx','upOpCtx,indx,altOpInfos') # indx is where we are in any
                                                      # of opInfos -- op.OpInfo
 
-def posSubop(token,opCtx):
-    # remember altOpInfos are all the same on opt or repeat, can only differ
+def posSubop(tokTT,opCtx):
+    # remember altOpInfos are all the same on optional or repeating, can only differ
     # in nextMandatory (=nextPossibles[-1] if present)
+    if tokTT.tType not in ['Identifier','OperatorOnly']: return False
     if opCtx==None or len(opCtx.altOpInfos)==0: return False
-    if token in opCtx.altOpInfos[0].subops[opCtx.indx].v['nextPossibles']:
+    if tokTT.text in opCtx.altOpInfos[0].subops[opCtx.indx].v['nextPossibles']:
         return True
     for oi in opCtx.altOpInfos:
-        if token == oi.subops[opCtx.indx].v['nextMandatory']:
+        if tokTT.text == oi.subops[opCtx.indx].v['nextMandatory']:
             return True
     # if any of the options has no nextMandatory, then we need to look up
     for oi in opCtx.altOpInfos:
         if oi.subops[opCtx.indx].v['nextMandatory']==None:
-            return posSubop(token,opCtx.upOpCtx)
+            return posSubop(tokTT,opCtx.upOpCtx)
     return False
-# 
 
+def needNoLeft(tok,toks,opCtx,noneOK):
+    if (tok.tT.tType in ['Identifier','OperatorOnly']) and ((posSubop(tok.tT,opCtx)) or \
+                         ((tok.tT.text not in op.noLeft) and (tok.tT.text in op.withLeft))):
+        # should have had a left or operand preceding subop
+        if noneOK: # none it is then
+            return None,U.prependGen(tok,toks)
+        # better insert defaultOperand
+        defOperandTok = L.Token(tT=L.TokTT(text='!!defaultOperand',tType='OperatorOnly'),
+                                indent=None,whiteB4=False,location=tok.location)
+        return defOperandTok, U.prependGen(tok,toks) # backup a bit
+    return tok,toks
+
+def needLeft(tok,toks):
+    if (tok.tT.tType not in ['Identifier','OperatorOnly']) or (tok.tT.text not in op.withLeft):
+        # insert space or adjacency subop
+        return L.Token(tT=L.TokTT(text=(" " if tok.whiteB4 else ""),tType='OperatorOnly'),
+                          indent=-1,whiteB4=False,location=tok.location),\
+               U.prependGen(tok,toks)
+    return tok,toks
+
+# We only call getExpr with left==None if we know the next token is an op
+# with no left (includes identifiers and constants). We don't call getExpr with a 
+# left unless the following token is an
+# operator that takes a left. However whether we give it to that operator
+# depends on precedence. 
 def getExpr(toks,left,prio,opCtx,noneOK):
     # toks is the token generator. Can push tokens back using prependGen
     # left is the left parameter if there is one
@@ -100,14 +116,10 @@ def getExpr(toks,left,prio,opCtx,noneOK):
     #
     # return an ast, and the token generator as possibly modified
     tok = next(toks,None)
-    def tokT():
-        return tok.tokTT.text
-    def posOp():
-        return tok.tokTT.tokenType in ['Identifier','OperatorOnly']
 
-    while (tok.tokTT.tokenType=='Comment') or (tok.tokTT.tokenType=='MCTcmd'):
-        if tok.tokTT.tokenType=='MCTcmd':
-            doMCTcmd(tok.tokTT.text,tok)
+    while (tok.tT.tType=='Comment') or (tok.tT.tType=='MCTcmd'):
+        if tok.tT.tType=='MCTcmd':
+            doMCTcmd(tok.tT.text,tok)
         tok = next(toks,None)
 
     # we're at the start here - get the relevant opInfo
@@ -115,63 +127,46 @@ def getExpr(toks,left,prio,opCtx,noneOK):
     # In the following: operators last forever and aren't superceded by identifers FIXME
     #
     opDict = None
-    tokPosSubop = posOp() and posSubop(tokT(),opCtx)
-    if tokPosSubop or (posOp() and (left==None) and (tokT() not in op.noLeft) and \
-                       (tokT() in op.withLeft)):
-        # should have had a left or operand preceding subop
-        if tokPosSubop and noneOK: # none it is then
-            return None,U.prependGen(tok,toks)
-        # better insert defaultOperand
-        assert left==None and noneOK==False
-        defOperandTok = L.Token(tokTT=L.TokTT(text='!!defaultOperand',tokenType='OperatorOnly'),
-                                        indent=None,whiteB4=False,location=tok.location)
-        toks = U.prependGen(tok,toks) # backup a bit
-        tok = defOperandTok
-        opDict = op.noLeft # nb. must have no right as well
-        assert tokT() in opDict
-    if (posOp()): # might be an operator
-        opDict = op.withLeft if left!=None else op.noLeft
-        if tokT() in opDict: # run with that
-            pass # we're happy
-        elif left==None and tokT() in op.withLeft: # maybe we can get a defaultOperand
-            assert False # already handled this case and inserted defaultOperand
-        elif left!=None: # didn't find something to pick it up, insert " " or "" (sub)op
-            toks = U.prependGen(tok,toks) # backup a bit
-            tok = L.Token(tokTT=L.TokTT(text=(" " if tok.whiteB4 else ""),
-                                        tokenType='OperatorOnly'),
-                          indent=-1,whiteB4=False,location=tok.location)
-            opDict = op.withLeft # must have a right as well
-            assert tokT() in opDict
-        else:
-            assert left==None and tokT() not in op.noLeft
-            # must be an existing identifier (or free identifier?)
-            opDict = None
-    if opDict==None:
-        if tok.tokTT.tokenType in ['String','Number','Atom']:
-            return A.AstConstant(const=tokT(),constType=tok.tokTT.tokenType)
-        #assert tok.tokTT.tokenType in ['Identifier','NewIdentifier',
-        #'FreeVariable','NewFreeVariable']
-        IdClasses = {'Identifier': A.AstIdentifier, 'NewIdentifier':A.AstNewIdentifier,
-                     'FreeVariable':A.AstFreeVariable, 'NewFreeVariable':A.AstNewFreeVariable}
-        return IdClasses[tok.tokTT.tokenType](identifier=tokT()), toks
-    # here ends interlude of special cases: back to operators
+    if left==None:
+        tok,toks = needNoLeft(tok,toks,opCtx,noneOK) # defaultOperand comes back if needed
+        if tok==None: return None,toks
+    else: # need something with a left
+        tok,toks = needLeft(tok,toks)
+        assert (tok.tT.tType in ['Identifier','OperatorOnly']) and (tok.tT.text in op.withLeft)
+        if (prio!=None) and (op.getZeroOpInfo(op.withLeft,(tok.tT.text,)).left.precedence < prio) :
+            # push the tok back and just return the left to go with the source of prio
+            return left,U.prependGen(tok,toks)
 
-    # at this point we are ready to start chewing up subops. It's exactly like subsubs,
-    # except that ...
-    oiL = [opDict[tokT()]] if isinstance(opDict[tokT()],op.OpInfo) else \
-                                [opDict[t] for t in opDict[tokT()]]
-    # in next line, want to reprocess op = 1st subop
-    opInfo,pAsts,toks = getSubops(toks=U.prependGen(tok,toks),\
+    opDict = op.withLeft if left!=None else op.noLeft
+    if tok.tT.text not in opDict:
+        assert left==None and tok.tT.text not in op.noLeft
+        # must be an identifier or constant
+        opDict = None
+        if tok.tT.tType in ['String','Number','Atom']:
+            ast = A.AstConstant(const=tok.tT.text,constType=tok.tT.tType)
+        else:
+            IdClasses = {'Identifier': A.AstIdentifier, 'NewIdentifier':A.AstNewIdentifier,
+                     'FreeVariable':A.AstFreeVariable, 'NewFreeVariable':A.AstNewFreeVariable}
+            ast = IdClasses[tok.tT.tType](identifier=tok.tT.text)
+    # here ends interlude of special cases: back to operators
+    else:
+        # at this point we are ready to start chewing up subops. It's exactly like subsubs,
+        # except that ...
+        oiL = [opDict[tok.tT.text]] if isinstance(opDict[tok.tT.text],op.OpInfo) else \
+                                [opDict[t] for t in opDict[tok.tT.text]]
+        # in next line, want to reprocess op = 1st subop
+        opInfo,pAsts,toks = getSubops(toks=U.prependGen(tok,toks),\
                                   opCtx=OpCtx(upOpCtx=opCtx,indx=0,altOpInfos=oiL))
-    if opInfo.left!=None: # rAsts is a list of multiple params
-        pAsts[0] = left # add in left param
-    ast = opFun(opInfo.astFun,pAsts)
+        if opInfo.left!=None: # pAsts is a list of multiple params
+            pAsts[0] = left # add in left param
+        ast = opFunL(opInfo.astFun,pAsts)
     # at this point the next tok might be a nextPos for our parent, otherwise we've
     # got a left and we should keep looking
     tok = next(toks,None)
-    if tok==None or posSubop(tokT(),opCtx):
+    if tok==None or posSubop(tok.tT,opCtx):
         return ast,U.prependGen(tok,toks)
-    # only option now is that what we have is a left operand for what follows
+    # only option now is that what we have is a left operand for what follows. 
+    # Don't need to insert a space/adjacent (sub)op -- needLeft will fix it
     expr,toks = getExpr(toks=U.prependGen(tok,toks),left=ast,prio=prio,opCtx=opCtx,noneOK=False)
     return expr,toks
 
@@ -180,8 +175,6 @@ def getExpr(toks,left,prio,opCtx,noneOK):
 # have pushed back the token that has lower left precedence than our right precedence.
 def getSubops( toks,opCtx):
     tok = next(toks,None)
-    def tokT():
-        return tok.tokTT.text
     maxPL = max((oi.paramLen for oi in opCtx.altOpInfos))
     pAstL = [None]*maxPL # list for param ast (might be truncated at the end)
     indx = 0  # this is the index into each list in oiL
@@ -191,16 +184,16 @@ def getSubops( toks,opCtx):
         # delete the entries in oiL that do. Of course for the start of a top level
         # we will have it because that's how we got here at all.
         oiL = [oiL[i] for i in range(len(oiL)) if oiL[i].subops[indx].occur!='mandatory' or \
-                                                  oiL[i].subops[indx].subop==tokT()]
+                                                  oiL[i].subops[indx].subop==tok.tT.text]
         assert oiL!=[]
         if len(oiL[0].subops)-1==indx and oiL[0].subops[indx].v['param']==None:
-            # note: this special case shouldn't be needed check/FIXME
+            # note: this special case shouldn't be needed check/FIXME.
             # the trailing subop has no right
             assert len(oiL)==1 # can't have a competitor for this!
             assert oiL[0].subops[indx].occur=='mandatory'
             return oiL[0],pAstL[:oiL[0].paramLen],toks
-        numMandatory = len([i for i in range(len(oiL)) \
-                                if oiL[i].subops[indx].occur=='mandatory'])
+        numMandatory = sum((1 for i in range(len(oiL)) \
+                                if oiL[i].subops[indx].occur=='mandatory'))
         # can you have the same token as optional/repeating in one possible subops match
         # while it is mandatory in a competing one? For the moment say no. Doc it FIXME
         assert numMandatory==0 or numMandatory==len(oiL) # all in sync.
@@ -210,20 +203,21 @@ def getSubops( toks,opCtx):
         while True:
             # come back here till past this sop
             nextSop = oiL[0].subops[indx] # all same - deleted different mandatory from oiL
-            if nextSop.subop!=tokT(): # finished repeat
+            if nextSop.subop!=tok.tT.text or (len(sopPs)==1 and nextSop.occur!='repeating'):
                 if nextSop.v['param']==None: 
                     assert len(sopPs)==0
                 elif nextSop.occur=='mandatory':
                     assert len(sopPs)==1
                     pAstL[nextSop.v['param'].pos] = sopPs[0] # un tuple it
                 else:
-                    if nextSop.occur=='optional': assert len(sopPs)<2
+                    if nextSop.occur=='optional': 
+                        assert len(sopPs)<2
                     pAstL[nextSop.v['param'].pos] = A.AstTuple(members=sopPs)
                 break # will loop on outer 'while True' - get more missing/optional tokens
             # we match the current token. If mandatory then we might have some with a
             # following parameter, and some without. Let's count
-            numWithoutParam = len([i for i in range(len(oiL))\
-                                              if oiL[i].subops[indx].v['param']==None])
+            numWithoutParam = sum((1 for i in range(len(oiL))\
+                                              if oiL[i].subops[indx].v['param']==None))
             noneOK = numWithoutParam > 0 # we'll disable defaultOperand
             # can't have both noneOK and a param with precedence, because noneOK requires
             # a following subop to demonstrate it, or it is a trailing mandatory.
@@ -233,18 +227,19 @@ def getSubops( toks,opCtx):
             # [check doc FIXME].
             curOpCtx = OpCtx(upOpCtx=opCtx.upOpCtx, indx=indx, altOpInfos=oiL)
             if noneOK or (oiL[0].subops[indx].v['param'].subsubs==None): # ??? was !=
+                #tok,toks = needNoLeft(
                 p,toks = getExpr(toks=toks,left=None,prio=precedence,opCtx=curOpCtx,noneOK=noneOK)
                 if p!=None:
                     oiL = [oiL[i] for i in range(len(oiL)) if oiL[i].subops[indx].v['param']!=None]
-                    p = opFun(oiL[0].subops[indx].v['param'].oneAdjust, p) # ??
+                    p = opFunAst(oiL[0].subops[indx].v['param'].oneAdjust, p) # ??
             else: # get subsubs
                 ssOpInfo = op.OpInfo(p, oiL[0].subops[indx].v['allAdjust'], \
                                      oil[0].subops[indx].v['param'].ssParamLen, \
                                      oiL[0].subops[indx].v['param'].subsubs ) # faked up OpInfo
                 ssOpCtx = OpCtx(upOpCtx=opCtx, indx=0 ,altOpInfos=[ssOpInfo]) # only 1 OpInfo
-                oi,pl,toks = getSubops(toks,ssOpCtx) # 
+                oi,pl,toks = getSubops(toks,ssOpCtx) # looks wrong???
                 assert oi==ssOpInfo # what else?
-                p = opFun(oiL[0].subops[indx].v['allAdjust'],A.AstTuple(members=pl))
+                p = opFunAst(oiL[0].subops[indx].v['allAdjust'],A.AstTuple(members=pl))
             if p==None: # we eliminate oiL that require a parameter here
                 # we assume that a param with no operand can't have subsubs -- document FIXME
                 oiL = [oiL[i] for i in range(len(oiL)) if oiL[i].subops[indx].v['param']==None]
@@ -258,8 +253,10 @@ def getSubops( toks,opCtx):
             assert len(oiL)==1
             return oiL[0],pAstL[:oiL[0].paramLen],U.prependGen(tok,toks)
 
+# Since we call getExpr with no left, must start with a noLeft op, presumably !!SOF
 def compiler(toks):
     doMCTcmd('operator "A.AstTuple" ["!!defaultOperand"]',None)
+    doMCTcmd('operator "None" ["!!SOF"] ["!!EOF"]',None)
     doMCTcmd('operator "None" ["!!SOF"] () ["!!EOF"]',None)
     #opCtx = OpCtx(upOpCtx=None,indx=0,altOpInfos=[])
     e,toks = getExpr(toks=toks,left=None,prio=None,opCtx=None,noneOK=False)
@@ -271,3 +268,4 @@ if __name__=="__main__":
     global ast
     ast = compiler(L.lexer("test.w"))
     print(ast)
+    #ast.pp(1)

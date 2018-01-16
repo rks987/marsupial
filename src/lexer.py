@@ -2,8 +2,8 @@
 
 import collections as C
 
-TokTT = C.namedtuple('TokTT',['text','tokenType'])
-Token = C.namedtuple('Token',['tokTT','indent','whiteB4','location'])
+TokTT = C.namedtuple('TokTT',['text','tType'])
+Token = C.namedtuple('Token',['tT','indent','whiteB4','location'])
 
 import utility as U
 import re
@@ -11,8 +11,8 @@ white = re.compile(r"\s*") # always matches
 upSlash = re.compile(r"\%\/")
 
 import decimal
-TokenClass = C.namedtuple('TokenClass',['tokRE','adjust','tokenType'])
-tokenClassByPrio = {}  # value for each TokenClass: list of (pattern,adjustment,tokenType)
+TokenClass = C.namedtuple('TokenClass',['tokRE','adjust','tType'])
+tokenClassByPrio = {}  # value for each TokenClass: list of (pattern,adjustment,tType)
 tokenClassPrios = []   # keep sorted list of Prios, 
 def insertTokenClass(prio, tokenClass):
     global tokenClassPrios
@@ -25,7 +25,7 @@ def insertTokenClass(prio, tokenClass):
 
 def lexer(fileName):
     lineNum = 0
-    yield Token(tokTT=TokTT(text="!!SOF",tokenType="OperatorOnly"),indent=0,whiteB4=False,
+    yield Token(tT=TokTT(text="!!SOF",tType="OperatorOnly"),indent=0,whiteB4=False,
                location=(fileName,0,0))
     # should allow %\ at end of line to split long lines (or %+ at start of next ?)
     for line in open(fileName, "r", encoding="utf-8"):
@@ -45,7 +45,7 @@ def lexer(fileName):
                       .match(line,indent+2)
                 if n:
                     #print(n[4])
-                    tokenClass = TokenClass(tokenType=n[1], tokRE=re.compile(n[4]),
+                    tokenClass = TokenClass(tType=n[1], tokRE=re.compile(n[4]),
                                             adjust=U.evalCallable(U.unquote(n[3])))
                     insertTokenClass(decimal.Decimal(n[2]), tokenClass)
                 else:
@@ -61,7 +61,7 @@ def lexer(fileName):
                         tm = tc.tokRE.match(line,pos)
                         if tm:
                             tt = tm['token'] if tc.adjust==None else tc.adjust(tm['token'])
-                            tokTT = TokTT(text=tt,tokenType=tc.tokenType)
+                            tokTT = TokTT(text=tt,tType=tc.tType)
                             if found!=None:
                                 if found!=Found(tokTT=tokTT,length=len(tm[0])):
                                     U.die("conflicting tokens: "+found.tokTT.text+" "+tm['token'],
@@ -71,15 +71,15 @@ def lexer(fileName):
                 if found:
                     wm = white.match(line, pos+found.length)
                     gotWhite = pos+found.length==len(line) or len(wm[0])>0
-                    if found.tokTT.tokenType!='Comment':
-                        yield Token(tokTT=found.tokTT,indent=indent,
+                    if found.tokTT.tType!='Comment':
+                        yield Token(tT=found.tokTT,indent=indent,
                                     whiteB4=whiteB4, location=(fileName,lineNum,pos))
                     whiteB4 = gotWhite
                     indent = -1
                     pos += found.length+len(wm[0])
                 else:
                     assert False
-    yield Token(tokTT=TokTT(text="!!EOF",tokenType="OperatorOnly"),indent=0,whiteB4=True,
+    yield Token(tT=TokTT(text="!!EOF",tType="OperatorOnly"),indent=0,whiteB4=True,
                location=(fileName,lineNum+1,0))
     return
 # above is too complicated...FIXME

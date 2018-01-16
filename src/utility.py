@@ -1,5 +1,6 @@
 def die(s,fn,lineNum,pos):
-    raise Exception(s+" in "+fn+"("+str(lineNum)+"/"+str(pos)+")")
+    #raise Exception(s+" in "+fn+"("+str(lineNum)+"/"+str(pos)+")")
+    pass
 
 import re
 
