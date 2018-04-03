@@ -29,6 +29,10 @@ def mDiscardCode(**kwargs):
     pass
 mDiscard = TFam(mDiscardCode)
 
+def mEmptyCode(**kargs):
+    pass
+mEmpty = TFam(mEmptyCode)
+
 # statements -- Discard x _X => _X
 def wPstatements(**kwargs):
     pass

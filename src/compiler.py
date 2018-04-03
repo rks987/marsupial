@@ -40,7 +40,8 @@ def opFunL(fun,astL):
     for a in astL: assert isinstance(a,A.AstNode)
     if callable(fun):
         return fun(astL)
-    return opFunAst(fun, A.AstTuple(members=astL))
+    if len(astL)==0: return fun # operator with no left or right - just return its fun
+    return opFunAst(fun, astL[0] if len(astL)==1 else A.AstTuple(members=astL))
 def opFunAst(fun,pAst):
     assert isinstance(pAst,A.AstNode)
     if fun==None: 
@@ -260,12 +261,13 @@ def compiler(toks):
     doMCTcmd('operator "None" ["!!SOF"] () ["!!EOF"]',None)
     #opCtx = OpCtx(upOpCtx=None,indx=0,altOpInfos=[])
     e,toks = getExpr(toks=toks,left=None,prio=None,opCtx=None,noneOK=False)
-    e.fixUp(parent=None,closure=None)
-    return e
+    c = A.AstClosure(e)
+    e.fixUp(parent=c,closure=c)
+    return c
 
 if __name__=="__main__":
     import lexer
     global ast
-    ast = compiler(L.lexer("test.w"))
-    print(ast)
+    ast = compiler(L.lexer("test0.w"))
+    for l in ast.pp(1): print(l)
     #ast.pp(1)
