@@ -5,34 +5,38 @@
 # happen when one end or the other becomes a value (I think). As the destination gets narrower
 # we change the conversion.
 
+import lenses as L
 import cttypes as T
 import decimal
 
 def isA(t1,t2): # returns up-down pair, or None
     if t1==t2: up,down = ( (lambda x: x), (lambda y: y))
+    #elif t1==T.mvtDiscard: assert False #return None # Discard is outside the hierarchy.
+    #elif t2==T.mvtDiscard: assert False #return ( anyDiscard, None ) #  This is really a convertTo
     elif t1==T.mvtEmpty: return ( assertFalse, assertFalse )
     elif t2==T.mvtEmpty: return None
-    elif t1==T.mvtDiscard: return None # Discard is outside the hierarchy.
-    elif t2==T.mvtDiscard: return ( anyDiscard, assertFalse ) #  This is really a convertTo
     elif t1==T.mvtNat and t2==T.mvtDecimal: up,down = ( natToDecimal, decimalToNat)
     elif t1==T.mvtDecimal and t2==T.mvtNat: return None
     #elif t1==T.mvtDecimal: assert False #FIXME
-    elif t1==T.mvtAny: return None # Discard already covered
-    elif t2==T.mvtAny: # everything (except Discard) isA Any
+    elif t1==T.mvtAny: return None
+    elif t2==T.mvtAny: # everything isA Any
         # for Any (and all Unions), the .value of an Mval is another Mval
         up,down = ( toAny(t1), fromAny(t1))
-    elif t1.tMfamily==T.tfList: # lists
-        if t2.tMfamily!=T.tfList: return None
+    elif t1.tMfamily==T.mfList: # lists
+        if t2.tMfamily!=T.mfList: return None
         convpair = isA(t1.tMindx,t2.tMindx)
         if convpair==None: return None
         up,down = listTo(convpair[0]),listFrom(convpair[1])
-    elif t1.tMfamily==T.tfTuple:
-        if t2.tMfamily!=T.tfTuple or len(t1.tMindx)!=len(t2.tMindx): return None
+    elif t1.tMfamily==T.mfTuple:
+        if t2.tMfamily!=T.mfTuple or len(t1.tMindx)!=len(t2.tMindx): return None
         # tMindx is a List Type value (i.e. a pytuple of MtVal)
         isAs = tuple(isA(t1.tMindx[i],t2.tMindx[i]) for i in range(len(t1.tMindx)))
         if any(isAs[i]==None for i in range(len(isAs))): return None
         up,down = (mtupleTo(tuple(isAs[i][0] for i in range(len(isAs)))),\
                    mtupleFrom(tuple(isAs[i][1] for i in range(len(isAs)))))
+    elif t1.tMfamily==T.mfProc:
+        if t2.tMfamily!=T.mfProc: return None
+        assert False # FIXME A=>B isA X=>Y if X isA A and B isA Y -- then figure out convs
     else:
         assert False # I think that's all we need at the moment FIXME
     # if we get here, we have up,down linking t1,t2. Now sort out tMsubset.
@@ -62,8 +66,14 @@ def isEqual(t1,t2):
 
 def intersection2(t1,t2): # 2 MtVal
     if t1.tMsubset==None and t2.tMsubset==None:
-        if isA(t1,t2): return t1
-        if isA(t2,t1): return t2
+        isA12 = isA(t1,t2)
+        if isA12!=None:
+            if isA12[1]!=None: return t1
+            return None # convertsTo, so no intersection
+        isA21 = isA(t2,t1)
+        if isA21!=None:
+            if isA21[1]!=None: return t2
+            return None # converts wrong way
         assert False # need to handle more complex cases FIXME
     convs = isA(T.tNoSub(t1),T.tNoSub(t2))
     if convs==None: # try other way
@@ -78,15 +88,21 @@ def intersection2(t1,t2): # 2 MtVal
     if t1.tMsubset != None and not T.vEqual(t1,t1.tMsubset[0],newv): return None
     return L.bind(t1).tMsubset.set([newv])
 
+def intersection3(t1,t2,t3):
+    i2 = intersection2(t2,t3)
+    if i2==None: return None
+    return intersection2(t1,i2) # probably unwise
+
+# FIXME this hack probably only works in a forward calc
 def conv(val,reqT): # val:Mval, reqT:MtVal
-    assert False
+    intsec = intersection2(val.mtVal,reqT)
+    updown = isA(intsec,val.mtVal)
+    if updown==None: return None
+    return updown[1](val) # don't need to convert up to reqT because intsec isA reqT
 
 # isA procedures
 def assertFalse(v): # for conversions that can't actually happen
     assert False
-
-def anyDiscard(v): # discard v
-    return T.mVdiscard
 
 def natToDecimal(v):
     return decimal.Decimal(v)

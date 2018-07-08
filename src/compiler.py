@@ -4,9 +4,9 @@
 #  {'token': 'true', 'tType': 'Identifier', 'indent': -1, 'gotWhite': True, 
 #   'location': ('src/wombat.wh', 25, 13)}
 
-# FIXME the lexer should return a token with the important characters (e.g. remove
-# the ` from a new identifier). Doing stuff here is a hack.
-# So operator code should check for TokenType as identifier or OperatorOnly.
+# The lexer should returns a token modified from source, e.g. remove the ` from a new identifier).
+# So you can get the same token with different token type (tType).
+# Operator code should checks for TokenType as Identifier or OperatorOnly.
 
 import utility as U
 import mast as A
@@ -14,6 +14,7 @@ import lexer as L
 import moperator as op # build and parse operators
 import collections as C
 import re
+import interp as I
 
 operatorRE = re.compile(r'\s*("(?:[^\\"]|\\.)+")\s+([^\n]+)\n?$')
 
@@ -262,12 +263,12 @@ def compiler(toks):
     #opCtx = OpCtx(upOpCtx=None,indx=0,altOpInfos=[])
     e,toks = getExpr(toks=toks,left=None,prio=None,opCtx=None,noneOK=False)
     c = A.AstClosure(e)
-    e.fixUp(parent=c,closure=c)
+    c.fixUp(parent=None,closure=None) # will fixup e as well
     return c
 
 if __name__=="__main__":
     import lexer
     global ast
     ast = compiler(L.lexer("test0.w"))
-    for l in ast.pp(1): print(l)
-    #ast.pp(1)
+    #for l in ast.pp(1): print(l)
+    I.interp(ast)

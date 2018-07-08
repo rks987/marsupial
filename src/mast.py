@@ -24,17 +24,17 @@ class AstNode:
 
 class AstTuple(AstNode):
     def __init__(self,members,parent=None,closure=None):
-        self.members = [members] if isinstance(members,AstNode) else members
+        self.members = (members,) if isinstance(members,AstNode) else members
         super().__init__(parent,closure)
     def __str__(self):
-        if self.members==[]: return '()'
+        if self.members==(): return '()'
         rslt = '('
         for x in self.members: rslt = rslt+x.__str__()+','
         return rslt[:-1]+')'
     def gotClRslt(self):
         return any(e.gotClRslt() for e in self.members)
     def pp(self,indent): 
-        if self.members==[]:
+        if self.members==():
             return [(' '*indent)+'()']
         elif len(self.members)==1:
             return ppFix([(' '*indent)+'BOX('] + \
@@ -54,11 +54,11 @@ class AstTuple(AstNode):
 def zeroTuple():  # is Unit.unit = defaultOperand in wombat
     return AstTuple(members=[]) 
 
-class AstDiscard(AstNode):
-    def __init__(self,parent=None,closure=None):
-        super().__init__(parent,closure)
-    def __str__(self):
-        print('_')
+#class AstDiscard(AstNode):
+#    def __init__(self,parent=None,closure=None):
+#        super().__init__(parent,closure)
+#    def __str__(self):
+#        print('_')
 
 #def toDiscard(x):
 #    return AstDiscard()
@@ -81,8 +81,10 @@ class AstClosure(AstNode):
         super().fixUp(parent,closure)
         # need to make sure there is an AstClRslt
         if not self.expr.gotClRslt():
-            eqProcParam = AstTuple([T.mVequal,AstTuple([AstClRslt(),expr])])
-            self.expr = astCall(eqProcParam)
+            # FIXME not the right way to do this, but ok for interp where equal is builtin
+            eqProcParam = AstTuple((AstIdentifier("equal"),AstTuple((AstClRslt(),self.expr))))
+            eqProcParam.fixUp(parent,closure)
+            self.expr = AstCall(eqProcParam)
         self.expr.fixUp(self,self) # I am up and closure
         #return self
 
@@ -191,8 +193,8 @@ def first2rest(tupNodeOrList):
         return AstTuple(members=first2rest(tupNodeOrList.members))
     # assume is a 2 entry list whose 2nd entry is a list or AstTuple
     if isinstance(tupNodeOrList[1], AstTuple):
-        return [tupNodeOrList[0]]+tupNodeOrList[1].members
-    return [tupNodeOrList[0]]+tupNodeOrList[1]
+        return (tupNodeOrList[0],)+tupNodeOrList[1].members
+    return (tupNodeOrList[0],)+tupNodeOrList[1]
 
 
 if __name__=="__main__":
