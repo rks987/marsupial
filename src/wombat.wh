@@ -1,0 +1,80 @@
+%/token Comment 100 #(?P<token>.*)
+# wombat.wh
+%/token FreeVariable 100 _(?P<token>[a-zA-Z0-9]+'*)
+%/token NewFreeVariable 100 `_(?P<token>[a-zA-Z0-9]+'*)
+%/token Identifier 100 (?P<token>[a-zA-Z][_a-zA-Z0-9]*'*)
+%/token NewIdentifier 100 `(?P<token>[a-zA-Z][_a-zA-Z0-9]*'*)
+%/token String 100 "unquote" (?P<token>"(\\"|\\\\|[^"\\])*")
+%/token Number 100 (?P<token>[0-9]+(\.[0-9]+)?)
+%/token Atom 100 \.(?P<token>[a-zA-Z0-9]+)
+%/token OperatorOnly 100 (?P<token>`*\('*)
+%/token OperatorOnly 100 (?P<token>`*\)'*)
+%/token OperatorOnly 100 (?P<token>`*\['*)
+%/token OperatorOnly 100 (?P<token>`*\]'*)
+%/token OperatorOnly 100 (?P<token>`*\{'*)
+%/token OperatorOnly 100 (?P<token>`*\}'*)
+# in next line should say what is in, not out FIXME
+%/token OperatorOnly 100 (?P<token>`*[^\$`'.a-zA-Z0-9()[\]{}%#\s]+'*)
+#%%/token OperatorOnly 100 `*[^a-zA-Z0-9()[\]{}%]+'*
+%/token MCTcmd 100 %\^(?P<token>[^\n]*)\n?
+%/token MCTast 100 %\{(?P<token>.*)%\}
+%/token OperatorOnly 100 (?P<token>`*_'*)
+%/token OperatorOnly 100 (?P<token>``+[a-zA-Z][_a-zA-Z0-9]*'*)
+%/token OperatorOnly 100 (?P<token>`*\$[a-zA-Z0-9\$_]*'*)
+
+# f x
+%^operator "A.callOp" (100) [" "] (200)
+# f(x)
+%^operator "A.callOp" (100) [""] (200)
+# ( expr )
+%^operator "None" ["("] () [")"]
+# [] -- empty list
+%^operator "A.AstIdentifier('tuple2list')" ["["] ["]"]
+# [ 1 2 3 ]
+%^operator "A.AstIdentifier('tuple2list')" ["[" "A.first2rest"] () [" " repeating] () ["]"]
+# [1 | [2 3]] -- but more used for pattern matching
+%^operator "A.AstIdentifier('prependList')" ["["] () ["|"] () ["]"]
+# unification! -- lowish priority, left but it doesn't matter
+%^operator "A.AstIdentifier('equal')" (20) ["="] (21)
+# { expr } -- an Any=>Any
+%^operator "A.toClosure" ["{"] () ["}"]
+# case exp of [ {option1 } {option2} {option3} ] -- passed to each, only one succeeds
+%^operator "A.AstIdentifier('casePswap')" ["case"] () ["of"] (999)
+# 3:Int
+%^operator "A.AstIdentifier('toType')" (90) [":"] (91)
+# $ -- no left or right
+%^operator "A.AstClParam()" ["$"]
+# 3 >? 4 -- returns left operand or fails
+%^operator "A.AstIdentifier('greaterOrFail')" (24) [">?"] (25)
+# 2*3
+%^operator "A.AstIdentifier('starOp')" (38) ["*"] (39)
+# 2-3
+%^operator "A.AstIdentifier('subtract')" (34) ["-"] (35)
+# statement;expression -- right assoc, but really associative
+%^operator "A.AstIdentifier('statements')" (2) [";"] (1)
+
+#    `fact = { case $:Nat of [
+#                { $ = 0; 1}
+#                { $ = `n >? 0; n*fact(n-1)}
+#              ]
+#            };
+#
+#    6 = fact `x; print x
+#
+#
+#
+#
+#
+#
+#
+#DELETED stuff:
+
+# The following should be in an import rather than include...
+
+#`MCTtuple = %{ MCT.Mtuple %};
+#
+#`TupleB = behaviour 
+#    { $=(`Tuple:Type,`how);
+#      `nb=Tuple.behaviours(TupleB)how; 
+#      [ .properties->Struct[], .axioms->[]
+
