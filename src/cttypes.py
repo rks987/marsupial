@@ -41,6 +41,18 @@ def tNoSub(t):
 # Note .tMindx and .value should not be of this form unless type is Any
 Mval = C.namedtuple('Mval','mtVal,value') # mtVal is the type, an MtVal
 
+def ppT(x):
+    if isinstance(x,Mval):
+        return ppT(x.mtVal)+':'+ppT(x.value)
+    elif isinstance(x,Mfamily):
+        return x.txt
+    elif isinstance(x,MtVal):
+        return ppT(x.tMfamily)+'('+ppT(x.tMindx)+')'+ \
+                ("" if x.tMsubset==None else ('/'+ppT(x.tMsubset)))
+    elif isinstance(x,C.abc.Sequence):
+        return '['+(','.join(ppT(xi) for xi in x))+']'
+    else: return x.__str__()
+
 def valToType(v): # v is an Mval
     valList = (v.value,) if v.value != None else None
     return L.bind(v.mtVal).tMsubset.set(valList) # MtVal(v.mtVal.famObj,v.mtVal.indxType,(v.value,))
@@ -110,11 +122,11 @@ mvtTupleTwoAnys = MtVal(mfTuple,(mvtAny,mvtAny),None)
 #mvListTwoAnyAndAny = Mval(mvtListOfType,(mvtTupleTwoAnys,mvtAny))
 #mvTupleTwoAnyAndAny = Mval(MtVal(mfTuple,mvListTwoAnyAndAny,None),((mvtAny,mvtAny),mvtAny))
 mvtProcTwoAnyToAny = MtVal(mfProc,(mvtTupleTwoAnys,mvtAny),None)
-mvTequal = mvtProcTwoAnyToAny
+mvTequal = typeWithVal(mvtProcTwoAnyToAny,P.PvRequal)
 mVequal = Mval(mvTequal,P.PvRequal)
 
 # statements : Tuple[Any Any] => Any
-mvTstatements = mvtProcTwoAnyToAny
+mvTstatements = typeWithVal(mvtProcTwoAnyToAny,P.PvRstatements)
 mVstatements = Mval(mvTstatements,P.PvRstatements)
 
 # casePswap -- _X x SemiSet(_X=>_Y) => _Y, but just Tuple[Any List(Proc(Any,Any))]=>Any here
@@ -129,7 +141,7 @@ mvtTupleAnyListProcAnyAny = MtVal(mfTuple,(mvtAny,mvtListProcAnyAny),None)
 #mvtTupleTupleAnyClosureTAny = MtVal(mfTuple,mvListTupleAnyClosureTAndAny,None)
 #mvTupleTupleAnyClosureTAny = Mval(mvtTupleTupleAnyClosureTAny,(mvtAny,mvtTupleAnyClosureT))
 #mvTcasePswap = MtVal(mfProc,mvTupleTupleAnyClosureTAny,None)
-mvTcasePswap = MtVal(mfProc,(mvtTupleAnyListProcAnyAny,mvtAny),None)
+mvTcasePswap = MtVal(mfProc,(mvtTupleAnyListProcAnyAny,mvtAny),(P.PvRcasePswap,))
 mVcasePswap = Mval(mvTcasePswap,P.PvRcasePswap)
 
 # toType -- Any x t:Type => t (t is the Type parameter), but just Tuple[Any Type]=>Any here
@@ -138,11 +150,11 @@ mVcasePswap = Mval(mvTcasePswap,P.PvRcasePswap)
 mvtTupleAnyType = MtVal(mfTuple,(mvtAny,mvtType),None)
 #mvListTupleAnyTypeAny = Mval(mvtListOfType,(mvtTupleAnyType,mvtAny))
 mvtTupleTupleAnyTypeAny = MtVal(mfTuple,(mvtTupleAnyType,mvtAny),None)
-mvTtoType = mvtTupleTupleAnyTypeAny
+mvTtoType = typeWithVal(mvtTupleTupleAnyTypeAny,P.PvRtoType)
 mVtoType = Mval(mvTtoType,P.PvRtoType)
 
 # tuple2list -- Tuple[lt:List(Type)] => List(Union(lt)) // Any => Any
-mvTtuple2list = MtVal(mfProc,(mvtAny,mvtAny),None)
+mvTtuple2list = MtVal(mfProc,(mvtAny,mvtAny),(P.PvRtuple2list,))
 mVtuple2list = Mval(mvTtuple2list,P.PvRtuple2list)
 
 # greaterOrFail -- Nat x Nat => Nat
@@ -151,19 +163,19 @@ mvtTupleTwoNats = MtVal(mfTuple,(mvtNat,mvtNat),None)
 #mvListTupleTwoNatsNat = Mval(mvtListOfType,(mvtTupleTwoNats,mvtNat))
 #mvtTupleTupleTwoNatsNat = MtVal(mfTuple,mvListTupleTwoNatsNat,None)
 #mvTupleTupleTwoNatsNat = Mval(mvtTupleTupleTwoNatsNat,((mvtNat,mvtNat),mvtNat))
-mvTgreaterOrFail = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),None)
+mvTgreaterOrFail = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(P.PvRgreaterOrFail,))
 mVgreaterOrFail = Mval(mvTgreaterOrFail,P.PvRgreaterOrFail)
 
 # starOp -- Nat x Nat => Nat
-mvTstarOp = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),None)
+mvTstarOp = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(P.PvRstarOp,))
 mVstarOp = Mval(mvTstarOp,P.PvRstarOp)
 
 # subtract -- Nat x Nat => Nat
-mvTsubtract = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),None)
+mvTsubtract = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(P.PvRsubtract,))
 mVsubtract = Mval(mvTsubtract,P.PvRsubtract)
 
 # print -- _X => _X
-mvTprint = MtVal(mfProc,(mvtAny,mvtType),None)
+mvTprint = MtVal(mfProc,(mvtAny,mvtAny),(P.PvRprint,))
 mVprint = Mval(mvTprint,P.PvRprint)
 
 

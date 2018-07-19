@@ -1,6 +1,6 @@
 # primitive.py has the primitve values for the interpreter
 #
-#import cttypes as T
+import cttypes as T
 import mhierarchy as H
 #import combine
 
@@ -44,8 +44,9 @@ class PVrun:
     def __init__(self,paramT,rsltT,caller):
         #self.owner = owner
         self.paramT = paramT
-        selt.rsltT = rsltT
+        self.rsltT = rsltT
         self.caller = caller
+        self.txt = None
     def run(self): # commonly used default
         return self
     def paramChanged(self,newType):
@@ -60,7 +61,8 @@ class PVrun:
 # NB if rslt and 2nd param can't be unified then fail -- FIXME
 class PvRstatements(PVrun):
     def __init__(self,paramT,rsltT,caller):
-        super().__init__(self,paramT,rsltT,caller)
+        super().__init__(paramT,rsltT,caller)
+        self.txt='(;)'
         assert paramT.tMfamily == mfTuple and len(paramT.tMindx)==2
         pCh,rCh = self.unifyP1R(False,False)
         #if pCh: self.caller.paramChanged(self.paramT)
@@ -91,8 +93,9 @@ class PvRstatements(PVrun):
 # NB if rslt and/or params can't be unified then fail -- FIXME
 class PvRequal(PVrun):
     def __init__(self,paramT,rsltT,caller):
-        super().__init__(self,paramT,rsltT,caller)
-        assert paramT.tMfamily == mfTuple and len(paramT.tMindx)==2
+        super().__init__(paramT,rsltT,caller)
+        self.txt = '(=)'
+        assert paramT.tMfamily == T.mfTuple and len(paramT.tMindx)==2
         self.unifyPPR(False,False)
     def paramChanged(self,newType):
         pCh,rCh = self.unifyPPR(True,False)
@@ -103,6 +106,7 @@ class PvRequal(PVrun):
     def unifyPPR(self,isP,isR):
         intersect = H.intersection3(self.paramT.tMindx[0],self.paramT.tMindx[1],self.rsltT)
         if intersect==None or intersect==T.mvtEmpty: raise mFail # fail
+        pCh = rCh = False
         if not H.isEqual(intersect,self.paramT.tMindx[0]) or \
                 not H.isEqual(intersect,self.paramT.tMindx[1]):
                     self.paramT = T.MtVal(mfTuple,(intersect,intersect), \
@@ -127,7 +131,8 @@ class PvRequal(PVrun):
 # and start a new one from scratch.
 class PvRcasePswap(PVrun):
     def __init__(self,paramT,rsltT,caller):
-        super().__init__(self,paramT,rsltT,caller)
+        super().__init__(paramT,rsltT,caller)
+        self.txt = '(case)'
         assert H.isA(paramT,T.mvtTupleAnyListProcAnyAny)
         self.cases = paramT.tMsubset[0][1]
         self.param4case = paramT.tMsubset[0][0]
@@ -141,7 +146,8 @@ class PvRcasePswap(PVrun):
 # toType -- Any x t:Type => t (t is the Type parameter)
 class PvRtoType(PVrun):
     def __init__(self,paramT,rsltT,caller):
-        super().__init__(self,paramT,rsltT,caller)
+        super().__init__(paramT,rsltT,caller)
+        self.txt = '(:)'
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -150,7 +156,8 @@ class PvRtoType(PVrun):
 # tuple2list -- Tuple[lt:List(Type)] => List(Union(lt))
 class PvRtuple2list(PVrun):
     def __init__(self,paramT,rsltT,caller):
-        super().__init__(self,paramT,rsltT,caller)
+        super().__init__(paramT,rsltT,caller)
+        self.txt = '(t2l)'
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -159,7 +166,8 @@ class PvRtuple2list(PVrun):
 # greaterOrFail -- Nat x Nat => Nat
 class PvRgreaterOrFail(PVrun):
     def __init__(self,paramT,rsltT,caller):
-        super().__init__(self,paramT,rsltT,caller)
+        super().__init__(paramT,rsltT,caller)
+        self.txt = '(>?)'
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -168,7 +176,8 @@ class PvRgreaterOrFail(PVrun):
 # starOp -- Nat x Nat => Nat
 class PvRstarOp(PVrun):
     def __init__(self,paramT,rsltT,caller):
-        super().__init__(self,paramT,rsltT,caller)
+        super().__init__(paramT,rsltT,caller)
+        self.txt = '(*)'
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -177,7 +186,8 @@ class PvRstarOp(PVrun):
 # subtract -- Nat x Nat => Nat
 class PvRsubtract(PVrun):
     def __init__(self,paramT,rsltT,caller):
-        super().__init__(self,paramT,rsltT,caller)
+        super().__init__(paramT,rsltT,caller)
+        self.txt = '(-)'
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -189,7 +199,8 @@ class PvRsubtract(PVrun):
 # how to print Decimal.
 class PvRprint(PVrun):
     def __init__(self,paramT,rsltT,caller):
-        super().__init__(self,paramT,rsltT,caller)
+        super().__init__(paramT,rsltT,caller)
+        self.txt = '(p)'
         self.printed = False
         self.tryPrint()
     def paramChanged(self,newType):

@@ -36,7 +36,11 @@ def isA(t1,t2): # returns up-down pair, or None
                    mtupleFrom(tuple(isAs[i][1] for i in range(len(isAs)))))
     elif t1.tMfamily==T.mfProc:
         if t2.tMfamily!=T.mfProc: return None
-        assert False # FIXME A=>B isA X=>Y if X isA A and B isA Y -- then figure out convs
+        pUpDown = isA(t2.tMindx[0],t1.tMindx[0])
+        rUpDown = isA(t1.tMindx[1],t2.tMindx[1])
+        if pUpDown==None or rUpDown==None: return None
+        up,down = ( (lambda x: x), (lambda y: y)) # horrible HACK FIXME
+        #assert False # FIXME A=>B isA X=>Y if X isA A and B isA Y -- then figure out convs
     else:
         assert False # I think that's all we need at the moment FIXME
     # if we get here, we have up,down linking t1,t2. Now sort out tMsubset.
@@ -53,6 +57,7 @@ def isA(t1,t2): # returns up-down pair, or None
 
 def isEqual(t1,t2):
     if t1==t2: return True
+    if t1.tMfamily==t2.tMfamily==T.mfProc: return True # HORRIBLE HACK FIXME
     assert not (isA(t1,t2)!=None and isA(t2,t1)!=None) # expensive debug test FIXME
     return False # or should it be: (isA(t1,t2)!=None and isA(t2,t1)!=None)
 
