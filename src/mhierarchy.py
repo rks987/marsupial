@@ -52,7 +52,7 @@ def isA(t1,t2): # returns up-down pair, or None
         return None # can't determine if t1 always lands on specific t2 -- probably not possible
     elif t1.tMsubset!=None and t2.tMsubset==None:
         # up will still work, need to change down
-        assert False # hopefully don't need this (might need to return None) FIXME
+        return (up,assertFalse) # hopefully don't need this (might need to return None) FIXME
     return up,down
 
 def isEqual(t1,t2):
@@ -91,7 +91,7 @@ def intersection2(t1,t2): # 2 MtVal
     newv = convs[1](t2.tMsubset[0])
     if newv==None: return None # mvtEmpty?
     if t1.tMsubset != None and not T.vEqual(t1,t1.tMsubset[0],newv): return None
-    return L.bind(t1).tMsubset.set([newv])
+    return L.bind(t1).tMsubset.set((newv,))
 
 def intersection3(t1,t2,t3):
     i2 = intersection2(t2,t3)
@@ -101,9 +101,10 @@ def intersection3(t1,t2,t3):
 # FIXME this hack probably only works in a forward calc
 def conv(val,reqT): # val:Mval, reqT:MtVal
     intsec = intersection2(val.mtVal,reqT)
-    updown = isA(intsec,val.mtVal)
-    if updown==None: return None
-    return updown[1](val) # don't need to convert up to reqT because intsec isA reqT
+    updown0 = isA(intsec,val.mtVal)
+    updown1 = isA(intsec,reqT)
+    assert updown0!=None and updown1!=None
+    return updown1[0](updown0[1](val))
 
 # isA procedures
 def assertFalse(v): # for conversions that can't actually happen
@@ -145,7 +146,8 @@ def toAny(t1):
     # should memoize this FIXME
     def vToAny(v): # v will be value of type t1
         # if Union we just return v FIXME
-        return T.Mval(t1,v)
+        ##assert T.vEqual(t1,t1.tMsubset[0],v)
+        return T.typeWithVal(t1,v) ##T.Mval(t1,v)
     return vToAny
 
 def fromAny(t1):

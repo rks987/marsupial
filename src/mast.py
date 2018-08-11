@@ -11,20 +11,27 @@ class AstNode:
     def __init__(self,parent=None,closure=None):
         self.parent = parent   # up a level
         self.closure = closure # closure we're in (None for top level)
-    def fixUp(self,parent,closure): # override if have subexpressions
+        self.fixed = False
+    def fixUp(self,parent,closure,upChain): # override if have subexpressions
+        if self.fixed:
+            pass #assert False
+        self.fixed = True
         self.parent = parent
         self.closure = closure
+        assert self not in upChain
+        self.upChain = upChain
         #return self
     def gotClRslt(self):
         return False # default
     def __str__(self):
         assert False # must be overridden
-    def pp(self,indent): # return a list of strings
+    def pp(self,indent=1): # return a list of strings
         return [(' '*indent) + self.__str__()] # default
 
 class AstTuple(AstNode):
     def __init__(self,members,parent=None,closure=None):
         self.members = (members,) if isinstance(members,AstNode) else members
+        assert isinstance(members,tuple)
         super().__init__(parent,closure)
     def __str__(self):
         if self.members==(): return '()'
@@ -33,7 +40,7 @@ class AstTuple(AstNode):
         return rslt[:-1]+')'
     def gotClRslt(self):
         return any(e.gotClRslt() for e in self.members)
-    def pp(self,indent): 
+    def pp(self,indent=1): 
         if self.members==():
             return [(' '*indent)+'()']
         elif len(self.members)==1:
@@ -46,13 +53,13 @@ class AstTuple(AstNode):
             return ppFix([(' '*indent)+'('] + \
             functools.reduce(operator.add, mppl) + \
             [(' '*indent)+')'],indent)
-    def fixUp(self,parent,closure):
-        super().fixUp(parent,closure)
-        for x in self.members: x.fixUp(self,closure)
+    def fixUp(self,parent,closure,upChain):
+        super().fixUp(parent,closure,upChain)
+        for x in self.members: x.fixUp(self,closure,self.upChain+(self,))
         #return self
 
 def zeroTuple():  # is Unit.unit = defaultOperand in wombat
-    return AstTuple(members=[]) 
+    return AstTuple(members=()) 
 
 #class AstDiscard(AstNode):
 #    def __init__(self,parent=None,closure=None):
@@ -73,20 +80,26 @@ class AstClosure(AstNode):
         self.expr = expr
         self.myIds = {}
         self.extIds = {}
-    def __str__(self):
-        return '{'+self.expr.__str__()+'}'
-    def pp(self,indent):
-        return ppFix([' '*indent+'{'] + self.expr.pp(indent+2) + [(' '*indent)+'}'], indent)
-    def fixUp(self,parent,closure):
-        super().fixUp(parent,closure)
         # need to make sure there is an AstClRslt
         if not self.expr.gotClRslt():
             # FIXME not the right way to do this, but ok for interp where equal is builtin
             eqProcParam = AstTuple((AstIdentifier("equal"),AstTuple((AstClRslt(),self.expr))))
-            eqProcParam.fixUp(parent,closure)
             self.expr = AstCall(eqProcParam)
-        self.expr.fixUp(self,self) # I am up and closure
-        #return self
+    def __str__(self):
+        return '{'+self.expr.__str__()+'}'
+    def pp(self,indent=1):
+        return ppFix([' '*indent+'{'] + self.expr.pp(indent+2) + [(' '*indent)+'}'], indent)
+    def fixUp(self,parent,closure,upChain):
+        super().fixUp(parent,closure,upChain)
+        self.expr.fixUp(self,self,upChain+(self,)) # I am up and closure
+        for id in self.extIds:
+            if id not in closure.extIds and id not in closure.myIds:
+                closure.extIds[id] = [self]
+            elif id in closure.extIds:
+                closure.extIds[id].append(self)
+            else:
+                closure.myIds[id].append(self)
+        pass #return self
 
 class AstClParam(AstNode): # i.e. $
     def __init__(self,parent=None,closure=None):
@@ -106,8 +119,8 @@ class AstIdentifier(AstNode):
     def __init__(self,identifier,parent=None,closure=None):
         super().__init__(parent,closure)
         self.identifier = identifier
-    def fixup(self,parent,closure):
-        super().fixUp(parent,closure)
+    def fixUp(self,parent,closure,upChain):
+        super().fixUp(parent,closure,upChain)
         id = self.identifier
         if id in closure.myIds:
             closure.myIds[id].append(self) # no known use of this?
@@ -123,11 +136,11 @@ class AstNewIdentifier(AstNode):
     def __init__(self,identifier,parent=None,closure=None):
         super().__init__(parent,closure)
         self.identifier = identifier
-    def fixup(self,parent,closure):
-        super().fixUp(parent,closure)
+    def fixUp(self,parent,closure,upChain):
+        super().fixUp(parent,closure,upChain)
         id = self.identifier
-        assert id not in closure.myIds and id not in closure.extIds
-        closure.myIds[id] = [self] # defing use is first in list
+        assert id not in closure.myIds #and id not in closure.extIds
+        closure.myIds[id] = [self] # defining use is first in list
     def __str__(self): 
         return '`'+self.identifier+' '
 
@@ -155,13 +168,13 @@ class AstCall(AstNode):
         return self.procParam.members[0]
     def param(self):
         return self.procParam.members[1]
-    def pp(self,indent):
+    def pp(self,indent=1):
         f = self.funct().pp(indent)
         f[-1] += '('
         return ppFix(f+self.param().pp(indent+2)+[(' '*indent)+')'], indent)
-    def fixUp(self,parent,closure):
-        super().fixUp(parent,closure)
-        self.procParam.fixUp(self,closure)
+    def fixUp(self,parent,closure,upChain):
+        super().fixUp(parent,closure,upChain)
+        self.procParam.fixUp(self,closure,self.upChain+(self,))
     def gotClRslt(self):
         return self.procParam.gotClRslt()
 
@@ -183,7 +196,7 @@ class AstPrim(AstNode):
         super().__init__(parent,closure)
         self.primVal = primVal
     def __str__(self):
-        return primVal.__str__()
+        return self.primVal.__str__()
 
 def first2rest(tupNodeOrList):
     if tupNodeOrList == None: return None # for luck
