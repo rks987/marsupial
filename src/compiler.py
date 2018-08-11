@@ -42,12 +42,12 @@ def opFunL(fun,astL):
     if callable(fun):
         return fun(astL)
     if len(astL)==0: return fun # operator with no left or right - just return its fun
-    return opFunAst(fun, astL[0] if len(astL)==1 else A.AstTuple(members=astL))
+    return opFunAst(fun, astL[0] if len(astL)==1 else A.AstTuple(members=tuple(astL)))
 def opFunAst(fun,pAst):
     assert isinstance(pAst,A.AstNode)
     if fun==None: 
         return pAst
-    return A.AstCall(procParam=A.AstTuple(members=[fun,pAst]))
+    return A.AstCall(procParam=A.AstTuple(members=(fun,pAst)))
 
 # At any point we are a hierarchy of operators. For each operator we are in we are
 # at a position which is a list of indices into the subops, and subsubs, etc.
@@ -161,7 +161,7 @@ def getExpr(toks,left,prio,opCtx,noneOK):
                                   opCtx=OpCtx(upOpCtx=opCtx,indx=0,altOpInfos=oiL))
         if opInfo.left!=None: # pAsts is a list of multiple params
             pAsts[0] = left # add in left param
-        ast = opFunL(opInfo.astFun,pAsts)
+        ast = opFunL(opInfo.astFun,tuple(pAsts))
     # at this point the next tok might be a nextPos for our parent, otherwise we've
     # got a left and we should keep looking
     tok = next(toks,None)
@@ -214,7 +214,7 @@ def getSubops( toks,opCtx):
                 else:
                     if nextSop.occur=='optional': 
                         assert len(sopPs)<2
-                    pAstL[nextSop.v['param'].pos] = A.AstTuple(members=sopPs)
+                    pAstL[nextSop.v['param'].pos] = A.AstTuple(members=tuple(sopPs))
                 break # will loop on outer 'while True' - get more missing/optional tokens
             # we match the current token. If mandatory then we might have some with a
             # following parameter, and some without. Let's count
@@ -255,6 +255,11 @@ def getSubops( toks,opCtx):
             assert len(oiL)==1
             return oiL[0],pAstL[:oiL[0].paramLen],U.prependGen(tok,toks)
 
+class FakeAstClosure(A.AstClosure):
+    def __init__(self,builtins):
+        self.myIds = {k:[] for k,v in builtins.items()}
+        self.extIds = {}
+
 # Since we call getExpr with no left, must start with a noLeft op, presumably !!SOF
 def compiler(toks):
     doMCTcmd('operator "A.AstTuple" ["!!defaultOperand"]',None)
@@ -263,12 +268,14 @@ def compiler(toks):
     #opCtx = OpCtx(upOpCtx=None,indx=0,altOpInfos=[])
     e,toks = getExpr(toks=toks,left=None,prio=None,opCtx=None,noneOK=False)
     c = A.AstClosure(e)
-    c.fixUp(parent=None,closure=None) # will fixup e as well
+    c.fixUp(parent=None,closure=FakeAstClosure(I.builtins),upChain=()) # will fixup e as well
     return c
+
+import sys
 
 if __name__=="__main__":
     import lexer
     global ast
-    ast = compiler(L.lexer("test0.w"))
+    ast = compiler(L.lexer(sys.argv[1]))
     #for l in ast.pp(1): print(l)
-    I.interp(ast)
+    print( I.interp(ast).pp())

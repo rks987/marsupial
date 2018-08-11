@@ -268,7 +268,7 @@ def doOperatorCmd(astFun,sopSpecText):
 def first2rest(tup):
     assert isinstance(tup,AstTuple)
     if len(tup.members)<2: return tup
-    return AstTuple(members=[tup[0],*tup[1]]) # called be parent/closure set
+    return AstTuple(members=(tup[0],*tup[1])) # called be parent/closure set
 
 if __name__=="__main__":
     #import lexer

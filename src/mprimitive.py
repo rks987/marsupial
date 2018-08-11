@@ -1,11 +1,17 @@
 # primitive.py has the primitve values for the interpreter
 #
+# Note that parameters might come in from a lower type. This wouldn't
+# matter if we were doing things properly and only using the properties
+# since lower types will have all the higher types properties.
+#
 import cttypes as T
 import mhierarchy as H
+import lenses as L
 #import combine
 
 # TFam objects are the primitive parts of types or families of types
 # tCode has to do with: (a) conversions; ???
+# NB don't currently use this, nor do I know how I would.
 class TFam:
     def __init__(self,tCode):
         assert callable(tCode)
@@ -26,32 +32,21 @@ def mAnyCode(**kwargs):
     pass
 mAny = TFam(mAnyCode)
 
-## Discard
-#def mDiscardCode(**kwargs):
-#    pass
-#mDiscard = TFam(mDiscardCode)
-
 def mEmptyCode(**kargs):
     pass
 mEmpty = TFam(mEmptyCode)
 
-# The following take paramT=pt,rsltT=rt,caller=primRunner params
-# and generate and return a PVrun object that responds to rsltChange and
-# paramChange messages and also generates messages to caller from procedures
-# controlled.
-
-class PVrun:
-    def __init__(self,paramT,rsltT,caller):
-        #self.owner = owner
-        self.paramT = paramT
-        self.rsltT = rsltT
-        self.caller = caller
+# A PVrun object will get a series of (1 or more) parameter-result pairs.
+# Each time it returns a parameter-result pair. The incoming pairs get
+# smaller. The object can take advantage of that, or it can just recompute 
+# each time. 
+class PVrun: 
+    def __init__(self,caller):
+        self.caller = caller # a PrimitiveRun in interp.py
+        self.pt = None # param type
+        self.rt = None # result type
         self.txt = None
-    def run(self): # commonly used default
-        return self
-    def paramChanged(self,newType):
-        assert False # must override
-    def rsltChanged(self,newType):
+    def pTrT(self,pt,rt): # take parameter and result and return new ones
         assert False # must override
 
 # statements -- Any x _X => _X
@@ -60,65 +55,28 @@ class PVrun:
 # We don't influence the first component.
 # NB if rslt and 2nd param can't be unified then fail -- FIXME
 class PvRstatements(PVrun):
-    def __init__(self,paramT,rsltT,caller):
-        super().__init__(paramT,rsltT,caller)
+    def __init__(self,caller):
+        super().__init__(caller)
         self.txt='(;)'
-        assert paramT.tMfamily == mfTuple and len(paramT.tMindx)==2
-        pCh,rCh = self.unifyP1R(False,False)
-        #if pCh: self.caller.paramChanged(self.paramT)
-        #if rCh: self.caller.rsltChanged(self.rsltT)
-    def paramChanged(self,newType):
-        pCh,rCh = unifyP1R(True,False)
-        if pCh: return self.paramT
-    def rsltChanged(self,newType):
-        pCh,rCh = self.unifyP1R(False,True)
-        if rCh: return self.rsltT
-    def unifyP1R(self,isP,isR):
-        # here is the logic of statements, which is just that the result is 2nd param
-        intersect = H.intersection2(self.paramT.tMindx[1],self.rsltT)
-        if intersect==None or intersect==T.mvtEmpty: raise mFail # fail
-        pCh = rCh = False
-        if not H.isEqual(intersect,self.paramT):
-            self.paramT = intersect
-            if not isP: self.caller.paramChanged(self.paramT)
-            pCh = True
-        if not H.isEqual(intersect,self.rsltT):
-            self.rsltT = intersect
-            if not isR: self.caller.rsltChanged(self.rsltT)
-            rCh = True
-        return pCh,rCh
+    def pTrT(self,pt,rt):
+        assert pt.tMfamily==T.mfTuple and len(pt.tMindx)==2
+        self.rt = H.intersection2(pt.tMindx[1],rt)
+        self.pt = L.bind(pt).tMindx[1].set(self.rt)
+        ch,self.pt = T.tupleFixUp(self.pt)
+        return self.pt,self.rt
 
 # equal -- _X x _Y => Intersection[_X _Y]
 # unify 2 params and result
 # NB if rslt and/or params can't be unified then fail -- FIXME
 class PvRequal(PVrun):
-    def __init__(self,paramT,rsltT,caller):
-        super().__init__(paramT,rsltT,caller)
+    def __init__(self,caller):
+        super().__init__(caller)
         self.txt = '(=)'
-        assert paramT.tMfamily == T.mfTuple and len(paramT.tMindx)==2
-        self.unifyPPR(False,False)
-    def paramChanged(self,newType):
-        pCh,rCh = self.unifyPPR(True,False)
-        if pCh: return self.paramT
-    def rsltChanged(self,newType):
-        pCh,rCh = self.unifyPPR(False,True)
-        if rCh: return self.rsltT
-    def unifyPPR(self,isP,isR):
-        intersect = H.intersection3(self.paramT.tMindx[0],self.paramT.tMindx[1],self.rsltT)
-        if intersect==None or intersect==T.mvtEmpty: raise mFail # fail
-        pCh = rCh = False
-        if not H.isEqual(intersect,self.paramT.tMindx[0]) or \
-                not H.isEqual(intersect,self.paramT.tMindx[1]):
-                    self.paramT = T.MtVal(mfTuple,(intersect,intersect), \
-                            None if intersect.tMsubset==None else \
-                               [(intersect.tMsubset[0],intersect.tMsubset[0])]) 
-                    if not isP: self.caller.paramChanged(self.paramT)
-                    pCh = True
-        if not H.isEqual(intersect,self.rsltT):
-            self.rsltT = intersect
-            if not isR: self.caller.rsltChanged(self.rsltT)
-            rCh = True
-        return pCh,rCh
+    def pTrT(self,pt,rt):
+        assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
+        self.rt = H.intersection3(pt.tMindx[0],pt.tMindx[1],rt)
+        ch,self.pt = T.tupleFixUp(T.MtVal(T.mfTuple,(self.rt,self.rt),None))
+        return self.pt,self.rt
 
 # casePswap -- _X x SemiSet(_X=>_Y) => _Y
 # This looks hard... We won't try to cope with changes to the 2nd parameter!
@@ -138,6 +96,7 @@ class PvRcasePswap(PVrun):
         self.param4case = paramT.tMsubset[0][0]
     def run(self):
         self.caseControl = combine.caseP(self,self.cases,self.param4case,self.rsltT)
+        return self
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -148,6 +107,9 @@ class PvRtoType(PVrun):
     def __init__(self,paramT,rsltT,caller):
         super().__init__(paramT,rsltT,caller)
         self.txt = '(:)'
+    def run(self):
+        assert False
+        return self
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -158,6 +120,9 @@ class PvRtuple2list(PVrun):
     def __init__(self,paramT,rsltT,caller):
         super().__init__(paramT,rsltT,caller)
         self.txt = '(t2l)'
+    def run(self):
+        assert False
+        return self
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -168,6 +133,9 @@ class PvRgreaterOrFail(PVrun):
     def __init__(self,paramT,rsltT,caller):
         super().__init__(paramT,rsltT,caller)
         self.txt = '(>?)'
+    def run(self):
+        assert False
+        return self
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -178,6 +146,9 @@ class PvRstarOp(PVrun):
     def __init__(self,paramT,rsltT,caller):
         super().__init__(paramT,rsltT,caller)
         self.txt = '(*)'
+    def run(self):
+        assert False
+        return self
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -188,6 +159,9 @@ class PvRsubtract(PVrun):
     def __init__(self,paramT,rsltT,caller):
         super().__init__(paramT,rsltT,caller)
         self.txt = '(-)'
+    def run(self):
+        assert False
+        return self
     def paramChanged(self,newType):
         assert False
     def rsltChanged(self,newType):
@@ -198,23 +172,19 @@ class PvRsubtract(PVrun):
 # moment this prints once, as soon as param=rslt gets set. We only know
 # how to print Decimal.
 class PvRprint(PVrun):
-    def __init__(self,paramT,rsltT,caller):
-        super().__init__(paramT,rsltT,caller)
+    def __init__(self,caller):
+        super().__init__(caller)
         self.txt = '(p)'
         self.printed = False
+    def pTrT(self,pt,rt):
+        self.pt = self.rt = H.intersection2(pt,rt)
         self.tryPrint()
-    def paramChanged(self,newType):
-        self.paramT = H.intersection2(self.paramT,newType)
-        self.tryPrint()
-    def rsltChanged(self,newType):
-        self.rsltT = H.intersection2(self.rsltT,newType)
-        self.tryPrint()
+        return self.pt,self.rt
     def tryPrint(self):
         if self.printed: return
-        self.paramT = self.rsltT = H.intersection2(self.paramT,self.rsltT)
-        if self.paramT.tMsubset != None:
-            assert len(self.paramT.tMsubset)==1
-            print(self.paramT.tMsubset[0])
+        if self.pt.tMsubset != None:
+            assert len(self.pt.tMsubset)==1
+            print(self.pt.tMsubset[0])
             self.printed = True
 
 # Decimal

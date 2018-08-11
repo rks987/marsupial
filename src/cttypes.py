@@ -5,6 +5,7 @@ import lenses as L
 import collections as C
 import mast as A
 import mprimitive as P
+#import interp as I
 
 # We treat base types as if families but with index set to None.
 # so these are :Type, families are :IndxType=>Type
@@ -35,28 +36,33 @@ def tNoSub(t):
     return MtVal(t.tMfamily,t.tMindx,None)
 
 # A value OR might be unknown with type saying what we do know.
-# Note that if there is a value then the type indicates the format of
-# the type, but isn't necessarily restricted (tMsubset) to just that value
-# There have been places in the code that assumed that - hopefully all fixed.
 # Note .tMindx and .value should not be of this form unless type is Any
 Mval = C.namedtuple('Mval','mtVal,value') # mtVal is the type, an MtVal
+Mprim = C.namedtuple('Mprim','txt,runner')
 
-def ppT(x):
+def ppT(x,xs):
+    if x in xs:
+        return "...."
+    #if isinstance(x,I.Et):
+    #    return type(x).__name__
     if isinstance(x,Mval):
-        return ppT(x.mtVal)+':'+ppT(x.value)
+        return ppT(x.mtVal,xs+(x,))+':'+ppT(x.value,xs+(x,))
     elif isinstance(x,Mfamily):
         return x.txt
     elif isinstance(x,MtVal):
-        return ppT(x.tMfamily)+'('+ppT(x.tMindx)+')'+ \
-                ("" if x.tMsubset==None else ('/'+ppT(x.tMsubset)))
+        return ppT(x.tMfamily,xs+(x,))+'('+ppT(x.tMindx,xs+(x,))+')'+ \
+                ("" if x.tMsubset==None else ('/'+ppT(x.tMsubset,xs+(x,))))
     elif isinstance(x,C.abc.Sequence):
-        return '['+(','.join(ppT(xi) for xi in x))+']'
-    else: return x.__str__()
+        return '['+(','.join(ppT(xi,xs+(x,)) for xi in x))+']'
+    elif isinstance(x,Mprim):
+        return x.txt
+    else: return str(x)
 
 def valToType(v): # v is an Mval
     valList = (v.value,) if v.value != None else None
     return L.bind(v.mtVal).tMsubset.set(valList) # MtVal(v.mtVal.famObj,v.mtVal.indxType,(v.value,))
 def typeWithVal(t,v):
+    assert v==None or t.tMsubset==None or (len(t.tMsubset)==1 and T.vEqual(t,v,t.tMsubset[0]))
     return L.bind(t).tMsubset.set((v,)) if v!=None else t
 def typeToVal(t):
     return Mval(t,t.tMsubset[0] if t.tMsubset!=None else None)
@@ -69,7 +75,7 @@ def typeToVal(t):
 # there is a type Type, whose values are types 
 mfType = Mfamily(txt='Type',famObj=P.mType, indxType=None)
 mvtType = MtVal(mfType,None,None)
-mvType = Mval(mvtType,mvtType) # Type:Type (missing universe level FIXME)
+mvType = typeWithVal(mvtType,mvtType) # Type:Type (missing universe level FIXME)
 # mvtType is a type, and other types belong to it, mvType is a specific value
 mfList = Mfamily('List',P.mList,indxType=mvtType)
 mvtListOfType = MtVal(mfList,mvtType,None)
@@ -84,6 +90,7 @@ mfDecimal = Mfamily('Decimal',P.mDecimal,None)
 mvtDecimal = MtVal(mfDecimal,None,None)
 mfNat = Mfamily('Nat',P.mNat,None)
 mvtNat = MtVal(mfNat,None,None)
+mVnat = typeWithVal(mvtType,mvtNat)
 mfAny = Mfamily('Any',P.mAny,None)
 mvtAny = MtVal(mfAny,None,None)
 # ClosureType = Proc((Any,Any):Tuple([Any Any]:List(Type))
@@ -100,7 +107,7 @@ mvtTupleProcAnyAnyAndAny = MtVal(mfTuple,(mvtProcAnyAny,mvtAny),None)
 mvtGenProcParam = mvtTupleProcAnyAnyAndAny
 
 def mvMakeDecimal(d):
-    return Mval(mvtDecimal,d)
+    return Mval(typeWithVal(mvtDecimal,d),d)
 
 ## statements : Tuple[Discard Any] => Any
 #mfDiscard = Mfamily(P.mDiscard,None)
@@ -122,12 +129,14 @@ mvtTupleTwoAnys = MtVal(mfTuple,(mvtAny,mvtAny),None)
 #mvListTwoAnyAndAny = Mval(mvtListOfType,(mvtTupleTwoAnys,mvtAny))
 #mvTupleTwoAnyAndAny = Mval(MtVal(mfTuple,mvListTwoAnyAndAny,None),((mvtAny,mvtAny),mvtAny))
 mvtProcTwoAnyToAny = MtVal(mfProc,(mvtTupleTwoAnys,mvtAny),None)
-mvTequal = typeWithVal(mvtProcTwoAnyToAny,P.PvRequal)
-mVequal = Mval(mvTequal,P.PvRequal)
+mPequal = Mprim('(=)',P.PvRequal)
+mvTequal = typeWithVal(mvtProcTwoAnyToAny,mPequal)
+mVequal = Mval(mvTequal,mPequal)
 
 # statements : Tuple[Any Any] => Any
-mvTstatements = typeWithVal(mvtProcTwoAnyToAny,P.PvRstatements)
-mVstatements = Mval(mvTstatements,P.PvRstatements)
+mPstatements = Mprim('(;)',P.PvRstatements)
+mvTstatements = typeWithVal(mvtProcTwoAnyToAny,mPstatements)
+mVstatements = Mval(mvTstatements,mPstatements)
 
 # casePswap -- _X x SemiSet(_X=>_Y) => _Y, but just Tuple[Any List(Proc(Any,Any))]=>Any here
 # CHECK THIS FIXME
@@ -141,8 +150,9 @@ mvtTupleAnyListProcAnyAny = MtVal(mfTuple,(mvtAny,mvtListProcAnyAny),None)
 #mvtTupleTupleAnyClosureTAny = MtVal(mfTuple,mvListTupleAnyClosureTAndAny,None)
 #mvTupleTupleAnyClosureTAny = Mval(mvtTupleTupleAnyClosureTAny,(mvtAny,mvtTupleAnyClosureT))
 #mvTcasePswap = MtVal(mfProc,mvTupleTupleAnyClosureTAny,None)
-mvTcasePswap = MtVal(mfProc,(mvtTupleAnyListProcAnyAny,mvtAny),(P.PvRcasePswap,))
-mVcasePswap = Mval(mvTcasePswap,P.PvRcasePswap)
+mPcasePswap = Mprim('(case)',P.PvRcasePswap)
+mvTcasePswap = MtVal(mfProc,(mvtTupleAnyListProcAnyAny,mvtAny),(mPcasePswap,))
+mVcasePswap = Mval(mvTcasePswap,mPcasePswap)
 
 # toType -- Any x t:Type => t (t is the Type parameter), but just Tuple[Any Type]=>Any here
 # but the Mval will have the required type after
@@ -150,12 +160,14 @@ mVcasePswap = Mval(mvTcasePswap,P.PvRcasePswap)
 mvtTupleAnyType = MtVal(mfTuple,(mvtAny,mvtType),None)
 #mvListTupleAnyTypeAny = Mval(mvtListOfType,(mvtTupleAnyType,mvtAny))
 mvtTupleTupleAnyTypeAny = MtVal(mfTuple,(mvtTupleAnyType,mvtAny),None)
-mvTtoType = typeWithVal(mvtTupleTupleAnyTypeAny,P.PvRtoType)
-mVtoType = Mval(mvTtoType,P.PvRtoType)
+mPtoType = Mprim('(:)',P.PvRtoType)
+mvTtoType = typeWithVal(mvtTupleTupleAnyTypeAny,mPtoType)
+mVtoType = Mval(mvTtoType,mPtoType)
 
 # tuple2list -- Tuple[lt:List(Type)] => List(Union(lt)) // Any => Any
-mvTtuple2list = MtVal(mfProc,(mvtAny,mvtAny),(P.PvRtuple2list,))
-mVtuple2list = Mval(mvTtuple2list,P.PvRtuple2list)
+mPtuple2list = Mprim('(t2l)',P.PvRtuple2list)
+mvTtuple2list = MtVal(mfProc,(mvtAny,mvtAny),(mPtuple2list,))
+mVtuple2list = Mval(mvTtuple2list,Mprim('(t2l)',mPtuple2list))
 
 # greaterOrFail -- Nat x Nat => Nat
 #mvListTwoNats = Mval(mvtListOfType,(mvtNat,mvtNat))
@@ -163,20 +175,25 @@ mvtTupleTwoNats = MtVal(mfTuple,(mvtNat,mvtNat),None)
 #mvListTupleTwoNatsNat = Mval(mvtListOfType,(mvtTupleTwoNats,mvtNat))
 #mvtTupleTupleTwoNatsNat = MtVal(mfTuple,mvListTupleTwoNatsNat,None)
 #mvTupleTupleTwoNatsNat = Mval(mvtTupleTupleTwoNatsNat,((mvtNat,mvtNat),mvtNat))
-mvTgreaterOrFail = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(P.PvRgreaterOrFail,))
-mVgreaterOrFail = Mval(mvTgreaterOrFail,P.PvRgreaterOrFail)
+mPgreaterOrFail = Mprim('(>?)',P.PvRgreaterOrFail)
+mvTgreaterOrFail = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(mPgreaterOrFail,))
+mVgreaterOrFail = Mval(mvTgreaterOrFail,mPgreaterOrFail)
 
 # starOp -- Nat x Nat => Nat
-mvTstarOp = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(P.PvRstarOp,))
-mVstarOp = Mval(mvTstarOp,P.PvRstarOp)
+mPstarOp = Mprim('(*)',P.PvRstarOp)
+mvTstarOp = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(mPstarOp,))
+mVstarOp = Mval(mvTstarOp,mPstarOp)
 
 # subtract -- Nat x Nat => Nat
-mvTsubtract = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(P.PvRsubtract,))
-mVsubtract = Mval(mvTsubtract,P.PvRsubtract)
+mPsubtract = Mprim('(-)',P.PvRsubtract)
+mvTsubtract = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(mPsubtract,))
+mVsubtract = Mval(mvTsubtract,mPsubtract)
 
 # print -- _X => _X
-mvTprint = MtVal(mfProc,(mvtAny,mvtAny),(P.PvRprint,))
-mVprint = Mval(mvTprint,P.PvRprint)
+mPprint = Mprim('(print)',P.PvRprint)
+mvTprint = MtVal(mfProc,(mvtAny,mvtAny),(mPprint,))
+mvTprintDecimal = MtVal(mfProc,(mvtDecimal,mvtDecimal),(mPprint,))
+mVprint = Mval(mvTprint,mPprint)
 
 
 def unknownAny():
