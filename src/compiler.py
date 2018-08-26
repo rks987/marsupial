@@ -276,6 +276,8 @@ import sys
 if __name__=="__main__":
     import lexer
     global ast
+    global debug
+    debug = len(sys.argv)>2
     ast = compiler(L.lexer(sys.argv[1]))
     #for l in ast.pp(1): print(l)
-    print( I.interp(ast).pp())
+    print( I.interp(ast,debug).pp())

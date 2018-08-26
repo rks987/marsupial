@@ -4,14 +4,16 @@
 # matter if we were doing things properly and only using the properties
 # since lower types will have all the higher types properties.
 #
-import cttypes as T
-import mhierarchy as H
-import lenses as L
-#import combine
-
 # TFam objects are the primitive parts of types or families of types
 # tCode has to do with: (a) conversions; ???
 # NB don't currently use this, nor do I know how I would.
+
+import cttypes as T
+import mhierarchy as H
+import lenses as L
+#import interp as I
+#import combine
+
 class TFam:
     def __init__(self,tCode):
         assert callable(tCode)
@@ -87,85 +89,167 @@ class PvRequal(PVrun):
 # we fail.
 # Hmm, maybe not so hard. To restart (no side-effects) just ignore current Et
 # and start a new one from scratch.
+#NOTE this is a temp version doing firstCase with given value
 class PvRcasePswap(PVrun):
-    def __init__(self,paramT,rsltT,caller):
-        super().__init__(paramT,rsltT,caller)
+    def __init__(self,caller):
+        super().__init__(caller)
         self.txt = '(case)'
         assert H.isA(paramT,T.mvtTupleAnyListProcAnyAny)
-        self.cases = paramT.tMsubset[0][1]
-        self.param4case = paramT.tMsubset[0][0]
-    def run(self):
+        self.cases = None
+        self.param4case = None
+    def run(self): # this is an anachronism
         self.caseControl = combine.caseP(self,self.cases,self.param4case,self.rsltT)
-        return self
-    def paramChanged(self,newType):
-        assert False
-    def rsltChanged(self,newType):
-        assert False
+    def pTrT(self,pt,rt):
+        assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
+        if pt.tMsubset==None: return pt,rt # we could do a bit more than this??
+        cases = pt.tMsubset[0][1]
+        p4c = pt.tMsubset[0][0]
+        pts = [None]*len(cases)
+        rts = [None]*len(cases)
+        for i in range(len(cases)):
+            #assert isinstance(cases[i],I.EtClosure) # don't allow primitive FIXME
+            cEt = self.caller.callEt
+            cr = ClosureRun(None,cases[i]) # I don't think callEt param is used????
+            pts[i],rts[i] = cr.changePR(pt,rt)
+            pts[i] = H.intersection2(pts[i],pt) # needed? FIXME
+            rts[i] = H.intersection2(rts[i],rt) # needed? FIXME
+        # Now we have possible params and results, we put together
+        # The parameters we are consistent with is the Union of pts, results is Union of rts
+        return H.unionList(pts),H.unionList(rts)
+
+        # our input must be the lowest (intersection) of all cases inputs.
+        # The output must be the union of all outputs, intersected with required type.
+        # For the moment we'll just set it to rt and see FIXME
 
 # toType -- Any x t:Type => t (t is the Type parameter)
 class PvRtoType(PVrun):
-    def __init__(self,paramT,rsltT,caller):
-        super().__init__(paramT,rsltT,caller)
+    def __init__(self,caller):
+        super().__init__(caller)
         self.txt = '(:)'
-    def run(self):
-        assert False
-        return self
-    def paramChanged(self,newType):
-        assert False
-    def rsltChanged(self,newType):
+    def pTrT(self,pt,rt):
         assert False
 
+# isType -- Any x t:Type => t (t is the Type parameter)
+class PvRisType(PVrun):
+    def __init__(self,caller):
+        super().__init__(caller)
+        self.txt = '(::)'
+    def pTrT(self,pt,rt):
+        assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
+        assert pt.tMindx[1].tMfamily==T.mfType and len(pt.tMindx[1].tMsubset)==1
+        reqT = pt.tMindx[1].tMsubset[0]
+        updown = H.isA(pt.tMindx[0],reqT)
+        if updown==None:
+            assert pt.tMindx[0].tMsubset==None
+            r = L.bind(pt).tMindx[0].set(reqT)
+        else:
+            if pt.tMindx[0].tMsubset==None:
+                r = L.bind(pt).tMindx[0].set(reqT)
+            else:
+                up,down = updown
+                val = up(pt.tMindx[0].tMsubset[0])
+                r = L.bind(pt).tMindx[0].set(T.typeWithVal(reqT,val))
+        return T.tupleFixUp(r)[1], rt
+
 # tuple2list -- Tuple[lt:List(Type)] => List(Union(lt))
-class PvRtuple2list(PVrun):
-    def __init__(self,paramT,rsltT,caller):
-        super().__init__(paramT,rsltT,caller)
+class PvRtuple2list(PVrun): # this only needs to run forwards
+    def __init__(self,caller):
+        super().__init__(caller)
         self.txt = '(t2l)'
-    def run(self):
-        assert False
-        return self
-    def paramChanged(self,newType):
-        assert False
-    def rsltChanged(self,newType):
-        assert False
+    def pTrT(self,pt,rt): # 
+        assert pt.tMfamily==T.mfTuple #and rt.tMfamily==T.mfList
+        # we cheat and only work if all elements same base type
+        t = T.tNoSub(pt.tMindx[0]) # first and only type
+        assert all(H.isA(tt,t)!=None for tt in pt.tMindx)
+        if pt.tMsubset==None: return pt,T.MtVal(T.mfList,t,None)
+        return pt,\
+               T.MtVal(T.mfList,t,tuple((conv(pt.tMsubset[0][i],pt.tMindx[i],t)\
+                                         for i in range(len(pt.tMindx)))))
 
 # greaterOrFail -- Nat x Nat => Nat
 class PvRgreaterOrFail(PVrun):
-    def __init__(self,paramT,rsltT,caller):
-        super().__init__(paramT,rsltT,caller)
+    def __init__(self,caller):
+        super().__init__(caller)
         self.txt = '(>?)'
-    def run(self):
-        assert False
-        return self
-    def paramChanged(self,newType):
-        assert False
-    def rsltChanged(self,newType):
-        assert False
+    def pTrT(self,pt,rt):
+        assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
+        leftT = H.intersection2(T.mvtNat,pt.tMindx[0])
+        rightT = H.intersection2(T.mvtNat,pt.tMindx[1])
+        grofT = H.intersection2(T.mvtNat,rt) # mvtEmpty if fail
+        left = leftT.tMsubset[0] if leftT.tMsubset!=None else None
+        right = rightT.tMsubset[0] if rightT.tMsubset!=None else None
+        grof = grofT.tMsubset[0] if grofT.tMsubset!=None else None
+        if left!=None and right!=None:
+            if grof!=None: assert grof==left
+            if left>right:
+                grof = left
+            else:
+                grofT=T.mvtEmpty # which isA Nat
+        elif left!=None and grof!=None: # and right==None
+            assert grof==left
+            return T.MtVal(T.mfTuple,(leftT,rightT),None), grofT
+        elif right!=None and grof!=None: # and left==None
+            left = grof
+            assert left>right
+        else:
+            return T.MtVal(T.mfTuple,(leftT,rightT),None), grofT
+        # left, right and grofT defined, maybe grof
+        return T.tupleFixUp(T.MtVal(T.mfTuple,(leftT,rightT),((left,right),)))[1],\
+               (T.typeWithVal(T.mvtNat,grof) if grof!=None else T.mvtEmpty)
 
 # starOp -- Nat x Nat => Nat
 class PvRstarOp(PVrun):
-    def __init__(self,paramT,rsltT,caller):
-        super().__init__(paramT,rsltT,caller)
+    def __init__(self,caller):
+        super().__init__(caller)
         self.txt = '(*)'
-    def run(self):
-        assert False
-        return self
-    def paramChanged(self,newType):
-        assert False
-    def rsltChanged(self,newType):
-        assert False
+    def pTrT(self,pt,rt):
+        assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
+        leftT = H.intersection2(T.mvtNat,pt.tMindx[0])
+        rightT = H.intersection2(T.mvtNat,pt.tMindx[1])
+        prodT = H.intersection2(T.mvtNat,rt)
+        left = leftT.tMsubset[0] if leftT.tMsubset!=None else None
+        right = rightT.tMsubset[0] if rightT.tMsubset!=None else None
+        prod = prodT.tMsubset[0] if prodT.tMsubset!=None else None
+        if left!=None and right!=None:
+            if prod!=None: assert prod==left*right
+            prod = left*right
+        elif left!=None and prod!=None: # and right==None
+            if left==0: return T.mvtEmpty,T.mvtEmpty
+            right = prod//left
+        elif right!=None and prod!=None: # and left==None
+            if right==0: return T.mvtEmpty,T.mvtEmpty
+            left = prod//right
+        else:
+            return T.MtVal(T.mfTuple,(leftT,rightT),None), prodT
+        if prod!=left*right: return T.mvtEmpty,T.mvtEmpty
+        return T.tupleFixUp(T.MtVal(T.mfTuple,(leftT,rightT),((left,right),)))[1],\
+               T.typeWithVal(T.mvtNat,prod)
 
 # subtract -- Nat x Nat => Nat
 class PvRsubtract(PVrun):
-    def __init__(self,paramT,rsltT,caller):
-        super().__init__(paramT,rsltT,caller)
+    def __init__(self,caller):
+        super().__init__(caller)
         self.txt = '(-)'
-    def run(self):
-        assert False
-        return self
-    def paramChanged(self,newType):
-        assert False
-    def rsltChanged(self,newType):
-        assert False
+    def pTrT(self,pt,rt):
+        assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
+        leftT = H.intersection2(T.mvtNat,pt.tMindx[0])
+        rightT = H.intersection2(T.mvtNat,pt.tMindx[1])
+        diffT = H.intersection2(T.mvtNat,rt)
+        left = leftT.tMsubset[0] if leftT.tMsubset!=None else None
+        right = rightT.tMsubset[0] if rightT.tMsubset!=None else None
+        diff = diffT.tMsubset[0] if diffT.tMsubset!=None else None
+        if left!=None and right!=None:
+            if diff!=None: assert diff==left-right
+            diff = left-right
+        elif left!=None and diff!=None: # and right==None
+            right = left-diff
+        elif right!=None and diff!=None: # and left==None
+            left = right+diff
+        else:
+            return T.MtVal(T.mfTuple,(leftT,rightT),None), diffT
+        if diff<0: return T.mvtEmpty,T.mvtEmpty # Nat has no negative
+        return T.tupleFixUp(T.MtVal(T.mfTuple,(leftT,rightT),((left,right),)))[1],\
+               T.typeWithVal(T.mvtNat,diff)
 
 # print -- _X => _X
 # We need a better system for interacting with the world, but for the
