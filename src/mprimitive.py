@@ -136,6 +136,7 @@ class PvRisType(PVrun):
         self.txt = '(::)'
     def pTrT(self,pt,rt):
         assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
+        if pt.tMindx[1].tMsubset==None: return pt,rt
         assert pt.tMindx[1].tMfamily==T.mfType and len(pt.tMindx[1].tMsubset)==1
         reqT = pt.tMindx[1].tMsubset[0]
         updown = H.isA(pt.tMindx[0],reqT)
