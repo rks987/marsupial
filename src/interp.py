@@ -94,70 +94,60 @@ class Et:
         self.closR = closR # ClosureRun context
         #self.curType = shadowing.curType if shadowing!=None else T.mvtAny # :T.MtVal
         self.rcvd = {} # waiting to process
-        self.toSend = {} # stuff we plan to send
+        self.running = False # set in preLoop
         self.curType = rsltT
-    def run(self):
-        for (i,k) in self.iterKids(): k.run()
-        self.run0()
-        return self
-    def run0(self):
-        pass # default, do nothing
     def kidsType(self,childId):
         assert False # return what we think a child's type is
-    def workToDo(self):
-        if len(self.rcvd)>0 or len(self.toSend)>0: return True
-        for (i,k) in self.iterKids():
-            if k.workToDo(): return True
-        return False
     def pp(self):
         if self.shadowing!=None:
             return str(self.shadowlevel)+'|'+self.shadowing.pp()+'|'
         return ('<'+T.ppT(self.curType,())+'>')
+    def ppr(self):
+        rslt = str(self.ast.pp())+(' R :' if self.running else ' N :')
+        for k,v in self.rcvd.items():
+            rslt = rslt + ' '+str(k)+':'+T.ppT(v)
+        for i,m in self.iterKids():
+            rslt = rslt+str(i)+': '+m.ppr()
+        return rslt
     def preLoop(self):
-        pass # default, nothing to do
-    def loop(self): # default -- called from ClosureRun
-        self.preLoop() # replaces run/run0 
-        while self.workToDo(): # only return with nothing below has work to do
-            for (i,k) in self.iterKids(): 
-                if k.workToDo(): k.loop()
-            if len(self.rcvd)!=0: #process all rcvd then do one toSend
-                k,v = self.rcvd.popitem()
-                # k is childId or negative number for parent/etc, v is a Neighbor rec
-                if k==-1:
-                    self.fromParent0(v) # do something
-                elif isinstance(k,str):
-                    self.fromClosR0(k,v)
-                else: # must be a child
-                    self.fromChild0(k,v)
-            elif len(self.toSend)!=0: # any of these might induce new rcvd
-                k,v = self.toSend.popitem()
-                if k==-1:
-                    self.up.fromChild(self.myChildId,self.curType)
-                elif isinstance(k,str):
-                    self.closR.updateAnId(k,v)
-                else:
-                    self.toChild(k,v)
+        self.running = True
+        return True # default, nothing to do
+    def loop(self): # default -- called from ClosureRun ???in need of redesign
+        didSomething = False
+        while True:
+            if debug: print(self.ppr())
+            preLoopOK = self.preLoop()
+            for (i,c) in self.iterKids():
+                cloop = c.loop()
+                didSomething = didSomething or cloop
+            #didSomething = didSomething or any(k.loop() for (i,k) in self.iterKids())
+            # when we get here, nothing below us has work to do 
+            if not preLoopOK or len(self.rcvd)==0: 
+                return didSomething
+            k,v = self.rcvd.popitem()
+            didSomething = True
+            # k is childId or negative number for parent/etc, v is a Neighbor rec
+            if k==-1:
+                self.fromParent0(v)
+            elif isinstance(k,str): # not sure that only self.closR sends these:
+                self.fromClosR0(k,v)
+            else: # must be a child
+                self.fromChild0(k,v)
     def iterKids(self): # iter through kids
         if False: yield # empty iterator, default if no kids
-    def fromChild(self,childId,newType):
-        self.rcvd[childId] = newType # though we will actually ignore newType
+    def receive(self,receiveId,newType):
+        # note it is tempting to do more here, but the sender still doing stuff.
+        if newType == T.mvtAny: return
+        self.rcvd[receiveId] = newType # though we will actually ignore newType
     def fromChild0(self,childId,newType):
         assert False # to be overridden -- children know their id.
     def toChild(self,childId,newType):
         assert False # sending to child varies with Et subtypes
-    def fromParent(self,newType): # curType/newType are T.MtVal
-        self.rcvd[-1] = newType
     def fromParent0(self,newType):
-        # This default is ok if we don't have to tell our children about it
-        self.curType,curCh,newWrong = gotNewType(newType,self.curType)
-        if newWrong:
-            self.toSend[-1] = self.curType
-        else:
-            self.toSend.pop(-1,None) # remove any (unlikely) older toSend
-    def fromClosR(self,iden,newType): # note EtIdentifier and EtClosure both have this
-        assert isinstance(self,EtClosure) or isinstance(self,EtIdentifier)
-        self.rcvd[iden] = newType
-    def fromClosR0(self,iden,newType):
+        # This default is ok if we don't have to tell our children or closR about it
+        self.curType,curCh,nW = gotNewType(self.up.kidsType(self.myChildId),self.curType)
+        return curCh # if curCh then we did something
+    def fromClosR0(self,iden,newType): #
         assert False # to be overriden by EtClosure and EtIdentifier
     def shadow(self,level): # default ok for Et with no children ???
         if level==self.shadowLevel: 
@@ -168,7 +158,6 @@ class Et:
 
 # utility routine for newType notifications like fromChild
 def gotNewType(newType,curType): # return new curType, if changed, if new not = intersect
-    #if H.isA(newType,curType)==None and not H.isEqual(newType,curType): assert False
     assert newType!=None
     if curType==None: return newType,True,False
     newCur = H.intersection2(newType,curType)
@@ -201,30 +190,35 @@ class EtTuple(Et):
     def iterKids(self):
         for i in range(len(self.members)): yield i,self.members[i] 
     def fromChild0(self,childId,newChildType): # only called from loop
-        nCT,curCh,nW = gotNewType(self.members[childId].curType,self.curType.tMindx[childId])
+        nCT,curCh,nW = gotNewType(self.members[childId].curType,self.kidsType(childId))
+        if not curCh: return False
         ctCh,self.curType = T.tupleFixUp(L.bind(self.curType).tMindx[childId].set(nCT))
-        if ctCh or curCh:
-            self.toSend[-1] = self.curType # check shadowing!! FIXME
         assert not nW
+        self.up.receive(self.myChildId,self.curType) # check shadowing!! FIXME
+        return True
         #if nW: # could this create an oscillating loop?
         #    self.toSend[myChildId] = self.curType.tMindx[childId]
     def fromParent0(self,newType): # only called from loop
+        didSomething = False
         newCur, curCh, newWrong = gotNewType(self.up.kidsType(self.myChildId),self.curType)
         ctChanged,newCur = T.tupleFixUp(newCur)
         # NB type of tuple is List(Type) so only ([0]) value in tMsubset is a pytuple of MtVal
         for i in range(len(self.members)):
             # should assert that both .tMindx have length 1
-            if not H.isEqual(self.curType.tMindx[i],newCur.tMindx[i]):
-                self.toSend[i] = newCur.tMindx[i] # shadowing?? FIXME
-        if newWrong or ctChanged:
-            self.toSend[-1] = newCur
-        self.curType = newCur
-    def toChild(self,childId,newType):
-        self.members[childId].fromParent(newType) # this is ouside the queue/loop system
+            if H.isA(self.curType.tMindx[i],newCur.tMindx[i])==None:
+                didSomething = True
+                self.members[i].receive(-1,newCur.tMindx[i]) # shadowing?? FIXME
+        if H.isA(self.up.kidsType(self.myChildId),newCur)==None:
+            didSomething = True
+            self.up.receive(self.myChildId,newCur)
+        if self.curType!=newCur:
+            self.curType = newCur
+            didSomething = True
+        return didSomething
 
 # myIds and extIds are an IdTypeReg with an mtval and a registry list. The registry
 # list has matching EtIdentifier nodes, and also EtClosure that use the id.
-def needIdType(k,closR): # return an MtVal
+def needIdType(k,closR): # return an IdTypeReg
     if k in closR.myIds: return closR.myIds[k].mtval
     if k in closR.closure.extIds: return closR.closure.extIds[k].mtval
     assert False
@@ -239,8 +233,11 @@ def needIdType(k,closR): # return an MtVal
 class EtClosure(Et):
     def __init__(self,shadowing,shadowLevel,ast,up,myChildId,closR,rsltT=T.mvtAny):
         super().__init__(shadowing,shadowLevel,ast,up,myChildId,closR,rsltT)
+        if isinstance(self.up,FakeEt): self.up.setChild(self) # hack
         assert isinstance(ast,A.AstClosure)
         self.curType = H.intersection2(rsltT,T.typeWithVal(T.mvtProcAnyAny,self))
+        if H.isA(self.up.kidsType(self.myChildId),self.curType)==None:
+            self.up.receive(self.myChildId,self.curType)
         # Ids seen but not newId:
         # Set all extIds to current values. Note that they must all have values "soon".
         # The closure is only callable after all values filled in. We register self with any
@@ -261,12 +258,13 @@ class EtClosure(Et):
         if self.gotAllEIs: return True # never changes from True to False, so memo when True
         self.gotAllEIs = All ((eiv.mtval.tMsubset != None) for eiv in self.extIds.values())
         return self.gotAllEIs
-    def fromClosR0(self,iden,newType): # note EtIdentifier and EtClosure both have this
-        newCur, curCh, newWrong = gotNewType(newType,self.extIds[iden].mtval)
-        if not curCh: return # current value not changed
+    def fromClosR0(self,iden,newType): # newType is closR's current val (or better)
+        newCur,curCh,nW = gotNewType(newType,self.extIds[iden].mtval)
+        if not curCh: return False # current value not changed
         self.extIds[iden] = L.bind(self.extIds[iden]).mtval.set(newCur)
         self.gotAllEIs = All ((eiv.mtval.tMsubset != None) for eiv in self.extIds.values())
-        assert not newWrong
+        assert not nW
+        return True
 
 # The following also covers AstNewIdentifier, AstClParam and AstClRslt
 class EtIdentifier(Et):
@@ -283,29 +281,32 @@ class EtIdentifier(Et):
             self.isLocal = True
         else:
             assert self.ident in closR.closure.extIds
-            self.toSend[-1] = self.curType = closR.closure.extIds[ast.identifier].mtval
+            self.curType = closR.closure.extIds[ast.identifier].mtval
+            if H.isA(self.up.kidsType(self.myChildId),self.curType)==None:
+                self.up.receive(self.myChildId,self.curType)
             self.isLocal = False
-        #assert H.isA(self.curType,rsltT) != None
     def pp(self):
         if self.shadowing!=None: return super().pp()
         q = "'" if self.isLocal else '"'
         return super().pp()+q+self.ident+q
     def fromClosR0(self,iden,newType): # note EtIdentifier and EtClosure both have this
         assert iden==self.ident
-        self.curType, curCh, newWrong = gotNewType(newType,self.curType)
-        if curCh: # current value changed
-            self.toSend[-1] = self.curType # tell parent
-        assert not newWrong
+        self.curType,curCh,nW = gotNewType(self.closR.myIds[iden].mtval,self.curType)
+        if curCh: self.up.receive(self.myChildId,self.curType)
+        assert not nW
+        return True
     def fromParent0(self,newType):
         # update our entry
         if not self.isLocal: # better agree
             assert H.isEqual(self.curType,newType)
             # not sure why parent is telling me this for a non local
         else:
-            self.curType,curCh,nW = gotNewType(newType,self.curType)
-            if curCh: 
-                self.toSend[self.ident] = self.curType
+            self.curType,curCh,nW = gotNewType(self.up.kidsType(self.myChildId),self.curType)
+            if H.isA(self.closR.myIds[self.ident].mtval,self.curType)==None: 
+                self.closR.updateAnId(self.ident,self.curType)
                 assert not nW
+                return True
+        return False
 
 # the "new" is compile time flag. At execution time it is just EtIdentifier???
 EtNewIdentifier = EtIdentifier
@@ -325,24 +326,35 @@ class EtNewFreeVariable(Et): # from compile time only ast
 # Note that the actual parameter and the target required by the procedure might
 # not be the same type. We force both down to the intersection. Ditto for the output.
 # This might mean that primitive procedures need to convert (e.g. H.conv) upwards.
-# 
+#
+# EtCall doesn't influence its proc child. And it can't actually do anything till
+# the proc child has a value. So we keep coming back till it does.
 class EtCall(Et):
     def __init__(self,shadowing,shadowLevel,ast,up,myChildId,closR,rsltT=T.mvtAny):
         super().__init__(shadowing,shadowLevel,ast,up,myChildId,closR,rsltT)
-        self.procParam = {
-            True:newEt(ast.procParam.members[0],self,True,closR,T.mvtProcAnyAny),
-            False:newEt(ast.procParam.members[1],self,False,closR,T.mvtAny) }
-        self.paramType = self.paramEt().curType
+        self.procType = T.mvtTopProc #mvtEmptyAny
+        proc = newEt(ast.procParam.members[0],self,True,closR,T.mvtTopProc)
+        self.procType = proc.curType # influence param and result types
+        self.paramType = T.mvtAny
+        param = newEt(ast.procParam.members[1],self,False,closR,T.mvtAny)
+        self.procParam = { True:proc, False:param }
+        self.paramType = param.curType
+        self.retryCount = 100 # not actually the right way to do it
+        #assert self.procType.tMfamily==T.mfProc
+        #if H.isA(self.paramType,self.procType.tMindx[0])==None:
+        #    param.receive(-1,self.procType.tMindx[0])
+        #if H.isA(rsltT,self.procType.tMindx[1])==None:
+        #    self.up.receive(self.myChildId,self.procType.tMindx[1])
+        #if H.isA(self.procType.tMindx[1],rsltT)==None:
+        #    proc.receive(-1,L.bind(self.procType).tMindx[1].set(rsltT))
         self.runner = None
     def procEt(self):
         return self.procParam[True]
     def paramEt(self):
         return self.procParam[False]
     def kidsType(self,childId):
-        if childId:
-            return self.procEt().curType # True=>procEt(), False=>paramEt()
-        return self.paramType
-    def iterKids(self):
+        return self.procType if childId else self.paramType # True=>procEt(), False=>paramEt()
+    def iterKids(self): # could maybe be "yield from self.procParam.items()"
         yield True,self.procEt()
         yield False,self.paramEt()
     def pp(self):
@@ -350,48 +362,67 @@ class EtCall(Et):
         return '%'+self.procEt().pp()+'(('+self.paramEt().pp()+'))->'+T.ppT(self.curType,())
     def preLoop(self):
         # We don't have any way to handle it if procedure not defined, so assume it is FIXME
-        if self.runner!=None: return
+        if self.runner!=None: return True
         funcT = self.procEt().curType
-        assert funcT.tMfamily == T.mfProc and len(funcT.tMsubset)==1
+        if not (funcT.tMfamily == T.mfProc and funcT.tMsubset!=None and len(funcT.tMsubset)==1):
+            self.retryCount -= 1
+            assert self.retryCount > 0
+            return False
+        self.running = True
         f = funcT.tMsubset[0]
-        fPT,fRT = funcT.tMindx # I think -- should be a pytuple of mtypes
+        #fPT,fRT = funcT.tMindx # I think -- should be a pytuple of mtypes
         #fPT = H.intersection2(self.paramEt().curType,fPT)
-        fPT,pch,nW = gotNewType(fPT,self.paramEt().curType)
-        if pch: self.toSend[False] = fPT # send to child (False=)param
-        self.curType = fRT = H.intersection2(self.curType,fRT)
+        #fPT,pch,nW = gotNewType(fPT,self.paramEt().curType)
+        #if pch: 
+        #    self.toSend[False] = fPT # send to child (False=)param
+        #    self.up.newBelow()
+        #self.curType = fRT = H.intersection2(self.curType,fRT)
         if isinstance(f,EtClosure):
-            self.runner = ClosureRun(self,f,fPT,self.curType)
+            self.runner = ClosureRun(self,f)
         else:
-            self.runner = PrimitiveRun(self,f,fPT,self.curType)
-        self.paramType,self.curType = self.runner.changePR(fPT,self.curType)
-        self.toSend[False] = self.paramType
-        self.rcvd[-1] = self.curType # this will induce loop to call fromParent0
-    def fromParent0(self,newType):
-        # this is the type of the target result
-        self.curType,curCh,newWrong = gotNewType(newType,self.curType)
+            self.runner = PrimitiveRun(self,f)
+        ds,npt,nct = self.runner.changePR(self.paramType,self.curType)
+        if H.isA(self.up.kidsType(self.myChildId),nct)==None:
+            self.up.receive(self.myChildId,nct)
+        if H.isA(self.paramEt().curType,npt)==None:
+            self.paramEt().receive(-1,npt)
+        self.curType = nct
+        self.paramType = npt
+        self.receive(-1,None) # fake it to make it run the runner
+        return True
+    def fromParent0(self,newType): # we ignore newType, get from parent. None means ???
+        # Note that whether we come from parent (result) or child (parameter), we come
+        # here and always uses the latest of each.
+        newCur,curCh,nW = gotNewType(self.up.kidsType(self.myChildId),self.curType)
+        newParam,paramCh,pnW = gotNewType(self.paramEt().curType,self.paramType)
+        #assert not nW and not pnW # we don't have something newer
+        if newType!=None and not curCh and not paramCh: return False
         assert self.runner!=None #??
-        if not curCh: return #??????????
-        assert self.paramType==self.paramEt().curType # ???
-        fPT,self.curType = self.runner.changePR(self.paramType,self.curType) # ????
-        self.paramType = H.intersection2(self.paramType,fPT) #???
-        if self.paramType!=self.paramEt().curType:
-            self.toSend[False] = self.paramType # send to child (False=)param
+        ds,npt,nct = self.runner.changePR(newParam,newCur) # ????
+        assert H.isA(npt,self.paramType)!=None # new is down or equal
+        if npt!=self.paramType:
+            self.paramEt().receive(-1,npt)
+        self.paramType = npt
+        #if self.paramType!=self.paramEt().curType:
+        #    self.paramEt().receive(-1,self.paramType)
         # We enter a period where our idea of paramType doesn't agree with paramEt's curType
         # This is not a problem if we always do children's rcvd first.
+        assert H.isA(nct,self.curType)!=None
+        self.curType = nct
         if self.up.kidsType(self.myChildId)!=self.curType:
-            self.toSend[-1] = self.curType # to parent ???
-    def fromChild0(self,childId,newType):
+            self.up.receive(self.myChildId,self.curType)
+        return True
+    def fromChild0(self,isProc,newType): # our childId is sensibly called isProc
         # Our children are self.procEt (childId=True) and self.paramEt (id False).
-        if childId: # our procedure
-            return # if type has changed after runner created it might be bad FIXME
-        #intersect = H.intersection2(self.paramEt().curType,newType)
-        #if not H.isEqual(intersect,self.paramEt().curType):
-        assert newType==self.paramEt().curType
-        self.paramType,self.curType = self.runner.changePR(newType,self.curType)
-        if self.paramType!=self.paramEt().curType:
-            self.toSend[False] = self.paramType # send to child (False=)param
-        if self.up.kidsType(self.myChildId)!=self.curType:
-            self.toSend[-1] = self.curType
+        if isProc: # our procedure
+            funcT = self.procEt().curType # get latest, should==newType
+            if funcT==self.procType: return False
+            self.procType = funcT
+            self.fromParent0(None)
+            return True
+            #assert H.isA(funcT,self.procType)!=None # must go down (or equal)
+        else:
+            return self.fromParent0(None) # always uses latest param and result
     def toChild(self,isProc,newType): # childId: true for proc, False for param
         (self.procEt() if isProc else self.paramEt()).fromParent(newType)
 
@@ -410,50 +441,53 @@ class Mrun: # either PrimitiveRun or ClosureRun
 
 # handles fake ids: ' $' and ' `$'
 class ClosureRun(Mrun): # an EtCall turns into this if func is a closure. up is the EtCall
-    def __init__(self,callEt,closure,fPT,fRT):
+    def __init__(self,callEt,closure):
         super().__init__(callEt)
         self.closure = closure
         self.myIds = {k:IdTypeReg(T.mvtAny,[]) for k in closure.ast.myIds} # our ids
         self.myIds[' $'] = IdTypeReg(T.mvtAny,[]) #paramT,[])
         self.myIds[' `$'] = IdTypeReg(T.mvtAny,[]) #rsltT,[])
         self.body = None # create when needed
-        self.fPT = fPT # ignored
-        self.fRT = fRT # ignored
     def pp(self):
         return '{!'+('^^'.join(k+':'+T.ppT(v.mtval,()) for k,v in self.myIds.items()))+'!}'
     def updateAnId(self,name,newType):
+        if newType==T.mvtAny: return
         newCur, curCh, newWrong = gotNewType(newType,self.myIds[name].mtval)
         if curCh: # different from curType
             self.myIds[name] = L.bind(self.myIds[name]).mtval.set(newCur)
             for r in self.myIds[name].registry: # tell uses and closures about change
-                r.fromClosR(name,newCur)
+                r.receive(name,newCur)
     def changePR0(self,newParamT,newRsltT):
         if self.body==None:
             assert self.closure.closCallable()
             # body of closure doesn't interact with outside except through ClosureRun
             self.body = newEt(self.closure.ast.expr,FakeEt(),None,self,newRsltT)
+            if isinstance(self.body.up,FakeEt): self.body.up.setChild(self.body) # hack
         self.updateAnId(' $',newParamT)
         self.updateAnId(' `$',newRsltT)
-        self.body.loop() # we return when nothing to do in body or its descendents
-        return self.myIds[' $'].mtval, self.myIds[' `$'].mtval
+        didSomething = self.body.loop() # we return when nothing to do in body or its descendents
+        return didSomething, self.myIds[' $'].mtval, self.myIds[' `$'].mtval
 
 EtClParam = EtIdentifier # fake id ' $'
 
 EtClRslt = EtIdentifier # fake id ' `$'
 
+# Doesn't handle side-effects like assignment. FIXME
 class PrimitiveRun(Mrun):
-    def __init__(self,callEt,primClass,fPT,fRT):
+    def __init__(self,callEt,primClass):
         super().__init__(callEt)
         self.primClass = primClass
         self.pvRun = None # create when needed
-        self.fPT = fPT # ignored
-        self.fRT = fRT # ignored
+        self.pt = self.rt = None
     def pp(self):
         return self.primClass.txt
     def changePR0(self,newParamT,newRsltT):
         if self.pvRun == None:
             self.pvRun = self.primClass.runner(self)
-        return self.pvRun.pTrT(newParamT,newRsltT)
+        npt,nrt = self.pvRun.pTrT(newParamT,newRsltT)
+        didSomething =  (npt!=self.pt or nrt!=self.rt)
+        self.pt,self.rt = npt,nrt
+        return didSomething,npt,nrt
 
 class EtConstant(Et):
     def __init__(self,shadowing,shadowLevel,ast,up,myChildId,closR,rsltT=T.mvtAny):
@@ -463,9 +497,7 @@ class EtConstant(Et):
             self.curType = T.typeWithVal(T.mvtDecimal,v)
         else:
             assert False # FIXME
-        self.toSend[-1] = self.curType
-    def run0(self):
-        pass
+        self.up.receive(self.myChildId,self.curType)
 
 astToEt = {'AstTuple':EtTuple,'AstClosure':EtClosure,'AstClParam':EtClParam, \
         'AstClRslt':EtClRslt,'AstIdentifier':EtIdentifier,'AstNewIdentifier':EtNewIdentifier, \
@@ -516,9 +548,13 @@ class FakeClosureRun(ClosureRun):
 
 class FakeEt(Et):
     def __init__(self):
-        pass
+        self.up = None
+        self.rcvd = {}
+        self.child = None
+    def setChild(self,child):
+        self.child = child
     def kidsType(self,childId):
-        return T.mvtAny
+        return self.child.curType
     def fromChild(self,childId,newType):
         pass
 
@@ -527,8 +563,9 @@ def interp(ast,d):
     debug = d
     assert isinstance(ast,A.AstClosure) # a program always forms a closure
     cet = EtClosure(None,0,ast,FakeEt(),None,FakeClosureRun(),T.mvtClosureT)
-    cr = ClosureRun(FakeEt(),cet,T.mvtUnit,T.mvtAny)
-    pt,rt = cr.changePR(T.mvtUnit,T.mvtAny)
+    cet.up.setChild(cet)
+    cr = ClosureRun(FakeEt(),cet)
+    ds,pt,rt = cr.changePR(T.mvtUnit,T.mvtAny)
     print(T.ppT(pt,()))
     print(T.ppT(rt,()))
     return cr
@@ -549,3 +586,5 @@ def interp(ast,d):
 
 if __name__=="__main__":
     pass
+
+# pp receiveId,T.ppT(self.curType),T.ppT(newType) if newType!=None else "None"

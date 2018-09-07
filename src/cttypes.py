@@ -95,6 +95,9 @@ mvTtypeNat = MtVal(mfType,None,(mvtNat,))
 mVnat = typeWithVal(mvtType,mvtNat)
 mfAny = Mfamily('Any',P.mAny,None)
 mvtAny = MtVal(mfAny,None,None)
+mfEmpty = Mfamily('Empty',P.mEmpty,None)
+mvtEmpty = MtVal(mfEmpty,None,None)
+
 # ClosureType = Proc((Any,Any):Tuple([Any Any]:List(Type))
 #mvListTwoTypes = Mval(mvtListOfType,(mvtType,mvtType)) # [Type Type] : List Type 
 mvtTupleTwoTypes = MtVal(mfTuple,(mvtType,mvtType),None)
@@ -104,6 +107,10 @@ mfProc = Mfamily('Proc',P.mProc,mvtTupleTwoTypes)
 mvtProcAnyAny = MtVal(mfProc,(mvtAny,mvtAny),None)
 #mvtProcAnyAny = MtVal(mfProc,mvTupleTwoAnys,None)
 mvtClosureT = mvtProcAnyAny
+
+# Any=>Empty isA P=>Q isA Empty=>Any
+mvtTopProc = mvtEmptyAny = MtVal(mfProc,(mvtEmpty,mvtAny),None)
+mvtBottomProc = mvtAnyEmpty = MtVal(mfProc,(mvtAny,mvtEmpty),None)
 
 #mvListProcAnyAnyAndAny = Mval(mvtTupleTwoTypes,(mvtProcAnyAny,mvtAny))
 mvtTupleProcAnyAnyAndAny = MtVal(mfTuple,(mvtProcAnyAny,mvtAny),None)
@@ -122,9 +129,6 @@ def mvMakeDecimal(d):
 #mVstatements = Mval(mvTstatements,P.PvRstatements)
 
 #mVdiscard = Mval(mvtDiscard,P.mDiscard) # value of type Discard -- should it just be unit?
-
-mfEmpty = Mfamily('Empty',P.mEmpty,None)
-mvtEmpty = MtVal(mfEmpty,None,None)
 
 # equal -- _X x _Y => Intersection[_X _Y] -- just Tuple[Any Any]=>Any for moment
 #mvListAnyAny = Mval(mvtListOfType,(mvtAny,mvtAny))

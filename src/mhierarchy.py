@@ -37,7 +37,7 @@ def isABase(t1,t2): # returns up-down pair, or None
         pUpDown = isA(t2.tMindx[0],t1.tMindx[0])
         rUpDown = isA(t1.tMindx[1],t2.tMindx[1])
         if pUpDown==None or rUpDown==None: return None
-        assert False # we don't yet convert procedures, do we???
+        #assert False # we don't yet convert procedures, do we???
         return ( (lambda x: x), (lambda y: y)) # horrible HACK FIXME
         # FIXME A=>B isA X=>Y if X isA A and B isA Y -- then figure out convs
     else:
