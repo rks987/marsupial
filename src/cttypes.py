@@ -185,7 +185,12 @@ mVisType = Mval(mvTisType,mPisType)
 # tuple2list -- Tuple[lt:List(Type)] => List(Union(lt)) // Any => Any
 mPtuple2list = Mprim('(t2l)',P.PvRtuple2list)
 mvTtuple2list = MtVal(mfProc,(mvtAny,mvtAny),(mPtuple2list,))
-mVtuple2list = Mval(mvTtuple2list,Mprim('(t2l)',mPtuple2list))
+mVtuple2list = Mval(mvTtuple2list,mPtuple2list)
+
+# consTuple2list -- Tuple[hd,Tuple[lt:List(Type)]] => List(Union(hd,lt)) // Any => Any
+mPconsTuple2list = Mprim('(ct2l)',P.PvRconsTuple2list)
+mvTconsTuple2list = MtVal(mfProc,(mvtAny,mvtAny),(mPconsTuple2list,))
+mVconsTuple2list = Mval(mvTconsTuple2list,mPconsTuple2list)
 
 # greaterOrFail -- Nat x Nat => Nat
 #mvListTwoNats = Mval(mvtListOfType,(mvtNat,mvtNat))

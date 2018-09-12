@@ -73,7 +73,8 @@ def posSubop(tokTT,opCtx):
     # in nextMandatory (=nextPossibles[-1] if present)
     if tokTT.tType not in ['Identifier','OperatorOnly']: return False
     if opCtx==None or len(opCtx.altOpInfos)==0: return False
-    if tokTT.text in opCtx.altOpInfos[0].subops[opCtx.indx].v['nextPossibles']:
+    if any(tokTT.text in opCtx.altOpInfos[i].subops[opCtx.indx].v['nextPossibles']\
+            for i in range(len(opCtx.altOpInfos))):
         return True
     for oi in opCtx.altOpInfos:
         if tokTT.text == oi.subops[opCtx.indx].v['nextMandatory']:
@@ -134,6 +135,8 @@ def getExpr(toks,left,prio,opCtx,noneOK):
         if tok==None: return None,toks
     else: # need something with a left
         tok,toks = needLeft(tok,toks)
+        if posSubop(tok.tT,opCtx): # this can happen if tok is insert " ", but maybe else
+            return left,U.prependGen(tok,toks) # put space subop into toks
         assert (tok.tT.tType in ['Identifier','OperatorOnly']) and (tok.tT.text in op.withLeft)
         if (prio!=None) and (op.getZeroOpInfo(op.withLeft,(tok.tT.text,)).left.precedence < prio) :
             # push the tok back and just return the left to go with the source of prio
@@ -194,6 +197,9 @@ def getSubops( toks,opCtx):
             assert len(oiL)==1 # can't have a competitor for this!
             assert oiL[0].subops[indx].occur=='mandatory'
             return oiL[0],pAstL[:oiL[0].paramLen],toks
+        # A tricky point is that mandatory might have no following value -- its only
+        # role is to pick the oiL. Optional and repeating always have a value param,
+        # though sometimes no values.
         numMandatory = sum((1 for i in range(len(oiL)) \
                                 if oiL[i].subops[indx].occur=='mandatory'))
         # can you have the same token as optional/repeating in one possible subops match
@@ -203,20 +209,30 @@ def getSubops( toks,opCtx):
         # indx till we hit tok
         sopPs = [] # put values for next sop here (might be repeating)
         while True:
-            # come back here till past this sop
-            nextSop = oiL[0].subops[indx] # all same - deleted different mandatory from oiL
-            if nextSop.subop!=tok.tT.text or (len(sopPs)==1 and nextSop.occur!='repeating'):
-                if nextSop.v['param']==None: 
-                    assert len(sopPs)==0
-                elif nextSop.occur=='mandatory':
-                    assert len(sopPs)==1
-                    pAstL[nextSop.v['param'].pos] = sopPs[0] # un tuple it
-                else:
-                    if nextSop.occur=='optional': 
-                        assert len(sopPs)<2
-                    pAstL[nextSop.v['param'].pos] = A.AstTuple(members=tuple(sopPs))
+            # come back here till past this sop (token != sop, or got 1 and not repeating)
+            nextSopText = oiL[0].subops[indx].subop
+            nextSopOccurs = [oiL[i].subops[indx].occur for i in range(len(oiL))]
+            nextSopvparams = [oiL[i].subops[indx].v['param'] for i in range(len(oiL))]
+            # If we have an operand, but the sop can't be repeating then this is a new sop even
+            # if text the same. This happens when you want a sop to occur 1 or more times.
+            if nextSopText!=tok.tT.text or (len(sopPs)==1 and 'repeating' not in nextSopOccurs):
+                if len(sopPs)==0 and None in nextSopvparams:
+                    oiL = [oiL[i] for i in range(len(oiL)) \
+                            if oiL[i].subops[indx].v['param']==None]
+                    # nothing to do
+                    break
+                elif 'mandatory' in nextSopOccurs: # must all be mandatory, see numMandatory
+                    assert len(sopPs)==1 and all(oc=='mandatory' for oc in nextSopOccurs)
+                    pAstL[oiL[0].subops[indx].v['param'].pos] = sopPs[0] # un tuple it
+                else: 
+                    if 'repeating' not in nextSopOccurs: # must be optional
+                        assert len(sopPs)<2 and all(nso=='optional' for nso in nextSopOccurs)
+                    else:
+                        assert all(nso in ['optional','repeating'] for nso in nextSopOccurs)
+                    pAstL[oiL[0].subops[indx].v['param'].pos] = A.AstTuple(members=tuple(sopPs))
                 break # will loop on outer 'while True' - get more missing/optional tokens
-            # we match the current token. If mandatory then we might have some with a
+            # If we come here then not past the current sop
+            # We match the current token. If mandatory then we might have some with a
             # following parameter, and some without. Let's count
             numWithoutParam = sum((1 for i in range(len(oiL))\
                                               if oiL[i].subops[indx].v['param']==None))
@@ -228,13 +244,21 @@ def getSubops( toks,opCtx):
             # Note that a subop with no parameter must be mandatory and have no subsubs.
             # [check doc FIXME].
             curOpCtx = OpCtx(upOpCtx=opCtx.upOpCtx, indx=indx, altOpInfos=oiL)
-            if noneOK or (oiL[0].subops[indx].v['param'].subsubs==None): # ??? was !=
-                #tok,toks = needNoLeft(
+            if noneOK or (oiL[0].subops[indx].v['param'].subsubs==None):
+                # subsubs absent in one then absent in all
+                assert all(oiL[i].subops[indx].v['param']==None or\
+                        oiL[i].subops[indx].v['param'].subsubs==None for i in range(len(oiL)))
                 p,toks = getExpr(toks=toks,left=None,prio=precedence,opCtx=curOpCtx,noneOK=noneOK)
                 if p!=None:
                     oiL = [oiL[i] for i in range(len(oiL)) if oiL[i].subops[indx].v['param']!=None]
                     p = opFunAst(oiL[0].subops[indx].v['param'].oneAdjust, p) # ??
-            else: # get subsubs
+                else:
+                    # we assume that a param with no operand can't have subsubs -- document FIXME
+                    oiL = [oiL[i] for i in range(len(oiL)) if oiL[i].subops[indx].v['param']==None]
+            else: # get subsubs, which must be all the same
+                #oiL = [oiL[i] for i in range(len(oiL)) if oiL[i].subops[indx].v['param']!=None]
+                assert len(oiL)==1 or all(oiL[0].subops[indx].v['param'].subsubs==\
+                        oiL[i].subops[indx].v['param'].subsubs for i in range(1,len(oiL)))
                 ssOpInfo = op.OpInfo(p, oiL[0].subops[indx].v['allAdjust'], \
                                      oil[0].subops[indx].v['param'].ssParamLen, \
                                      oiL[0].subops[indx].v['param'].subsubs ) # faked up OpInfo
@@ -242,11 +266,6 @@ def getSubops( toks,opCtx):
                 oi,pl,toks = getSubops(toks,ssOpCtx) # looks wrong???
                 assert oi==ssOpInfo # what else?
                 p = opFunAst(oiL[0].subops[indx].v['allAdjust'],A.AstTuple(members=pl))
-            if p==None: # we eliminate oiL that require a parameter here
-                # we assume that a param with no operand can't have subsubs -- document FIXME
-                oiL = [oiL[i] for i in range(len(oiL)) if oiL[i].subops[indx].v['param']==None]
-            else: # we eliminate oiL that require no parameter
-                oiL = [oiL[i] for i in range(len(oiL)) if oiL[i].subops[indx].v['param']!=None]
             if p!=None: 
                 sopPs.append(p)
             tok = next(toks,None)

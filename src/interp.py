@@ -262,7 +262,7 @@ class EtClosure(Et):
         newCur,curCh,nW = gotNewType(newType,self.extIds[iden].mtval)
         if not curCh: return False # current value not changed
         self.extIds[iden] = L.bind(self.extIds[iden]).mtval.set(newCur)
-        self.gotAllEIs = All ((eiv.mtval.tMsubset != None) for eiv in self.extIds.values())
+        self.gotAllEIs = all ((eiv.mtval.tMsubset != None) for eiv in self.extIds.values())
         assert not nW
         return True
 
@@ -531,6 +531,7 @@ builtins = {
             "isType":IdTypeReg(T.mvTisType,[]),
             "toType":IdTypeReg(T.mvTtoType,[]),
             "tuple2list":IdTypeReg(T.mvTtuple2list,[]),
+            "consTuple2list":IdTypeReg(T.mvTconsTuple2list,[]),
             "greaterOrFail":IdTypeReg(T.mvTgreaterOrFail,[]),
             "starOp":IdTypeReg(T.mvTstarOp,[]),
             "subtract":IdTypeReg(T.mvTsubtract,[]),

@@ -253,6 +253,9 @@ def getSopSpec(sopSpecText):
     # now need to add to each parameter, the list of possible nextSop
     # and the next mandatory if there is no precedence.
     nextMandatory,possibles,pLen = getMandPoss(sopSpec,0,(1 if left!=None else 0))
+    for i in range(len(sopSpec)):
+        if sopSpec[i].occur=='repeating': # if repeating then we need to be in nextPossibles
+            sopSpec[i].v['nextPossibles'].append(sopSpec[i].subop) 
     return left,sopSpec,pLen
 
 def doOperatorCmd(astFun,sopSpecText):

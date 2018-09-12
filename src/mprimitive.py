@@ -94,11 +94,11 @@ class PvRcasePswap(PVrun):
     def __init__(self,caller):
         super().__init__(caller)
         self.txt = '(case)'
-        assert H.isA(paramT,T.mvtTupleAnyListProcAnyAny)
+        #assert H.isA(paramT,T.mvtTupleAnyListProcAnyAny)
         self.cases = None
         self.param4case = None
-    def run(self): # this is an anachronism
-        self.caseControl = combine.caseP(self,self.cases,self.param4case,self.rsltT)
+    #def run(self): # this is an anachronism
+    #    self.caseControl = combine.caseP(self,self.cases,self.param4case,self.rsltT)
     def pTrT(self,pt,rt):
         assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
         if pt.tMsubset==None: return pt,rt # we could do a bit more than this??
@@ -127,7 +127,18 @@ class PvRtoType(PVrun):
         super().__init__(caller)
         self.txt = '(:)'
     def pTrT(self,pt,rt):
-        assert False
+        assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
+        if pt.tMindx[1].tMsubset==rt.tMsubset==None: return pt,rt
+        assert pt.tMindx[1].tMfamily==T.mfType and len(pt.tMindx[1].tMsubset)==1
+        reqT = pt.tMindx[1].tMsubset[0]
+        irt = H.intersection2(reqT,rt) # irt must have the value ?!?
+        return L.bind(pt).tMindx[0].set(irt), irt
+        #if pt.tMindx[0].tMsubset!=None:
+        #    nv = H.conv(pt.tMindx[0].tMsubset[0],pt.tMindx[0],irt)
+        #    irtWithVal = T.typeWithVal(irt,val)
+        #    return L.bind(pt).tMindx[0].set(irtWithVal), irtWithVal
+        ## if here then rt has a val but pt doesn't, and we go backwards
+        #nv = H.conv(irt.tMsubset[0],irt,pt.tMindx[0])
 
 # isType -- Any x t:Type => t (t is the Type parameter)
 class PvRisType(PVrun):
@@ -166,6 +177,24 @@ class PvRtuple2list(PVrun): # this only needs to run forwards
         return pt,\
                T.MtVal(T.mfList,t,tuple((conv(pt.tMsubset[0][i],pt.tMindx[i],t)\
                                          for i in range(len(pt.tMindx)))))
+
+# consTuple2list -- (hd,(t1,t2,...) --> [hd t1 t2 ...] -- operasator support
+class PvRconsTuple2list(PVrun): # this only needs to run forwards
+    def __init__(self,caller):
+        super().__init__(caller)
+        self.txt = '(ct2l)'
+    def pTrT(self,pt,rt): 
+        if pt.tMsubset==None: return pt,rt
+        assert pt.tMfamily==T.mfTuple
+        # we cheat and only work if all elements same base type
+        hd = pt.tMindx[0] # first type is in hd
+        tl = pt.tMindx[1] # an mfTuple with 0 or more members
+        t = T.tNoSub(hd) # first and only type
+        for tt in tl.tMindx: t = H.union2(t,T.tNoSub(tt))
+        return pt,\
+               T.MtVal(T.mfList,t,(((H.conv(hd.tMsubset[0],hd,t),)+\
+               tuple((H.conv(tl.tMindx[i].tMsubset[0],tl.tMindx[i],t)\
+                                         for i in range(len(tl.tMindx))))),))
 
 # greaterOrFail -- Nat x Nat => Nat
 class PvRgreaterOrFail(PVrun):
