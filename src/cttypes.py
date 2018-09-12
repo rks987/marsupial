@@ -33,6 +33,7 @@ MtVal = C.namedtuple('MtVal','tMfamily,tMindx,tMsubset') # a .value for types
 # sometimes we want the type without any subset
 def tNoSub(t):
     if t.tMsubset==None: return t
+    #if t.tMfamily==mfTuple: return MtVal(mfTuple,tuple(tNoSub(tt) for tt in t.tMindx),None)
     return MtVal(t.tMfamily,t.tMindx,None)
 
 # A value OR might be unknown with type saying what we do know.
@@ -40,7 +41,7 @@ def tNoSub(t):
 Mval = C.namedtuple('Mval','mtVal,value') # mtVal is the type, an MtVal
 Mprim = C.namedtuple('Mprim','txt,runner')
 
-def ppT(x,xs):
+def ppT(x,xs=()):
     if x in xs:
         return "...."
     #if isinstance(x,I.Et):
@@ -62,7 +63,7 @@ def valToType(v): # v is an Mval
     valList = (v.value,) if v.value != None else None
     return L.bind(v.mtVal).tMsubset.set(valList) # MtVal(v.mtVal.famObj,v.mtVal.indxType,(v.value,))
 def typeWithVal(t,v):
-    assert v==None or t.tMsubset==None or (len(t.tMsubset)==1 and T.vEqual(t,v,t.tMsubset[0]))
+    assert v==None or t.tMsubset==None or (len(t.tMsubset)==1 and vEqual(t,v,t.tMsubset[0]))
     return L.bind(t).tMsubset.set((v,)) if v!=None else t
 def typeToVal(t):
     return Mval(t,t.tMsubset[0] if t.tMsubset!=None else None)
@@ -90,17 +91,26 @@ mfDecimal = Mfamily('Decimal',P.mDecimal,None)
 mvtDecimal = MtVal(mfDecimal,None,None)
 mfNat = Mfamily('Nat',P.mNat,None)
 mvtNat = MtVal(mfNat,None,None)
+mvTtypeNat = MtVal(mfType,None,(mvtNat,))
 mVnat = typeWithVal(mvtType,mvtNat)
 mfAny = Mfamily('Any',P.mAny,None)
 mvtAny = MtVal(mfAny,None,None)
+mfEmpty = Mfamily('Empty',P.mEmpty,None)
+mvtEmpty = MtVal(mfEmpty,None,None)
+
 # ClosureType = Proc((Any,Any):Tuple([Any Any]:List(Type))
 #mvListTwoTypes = Mval(mvtListOfType,(mvtType,mvtType)) # [Type Type] : List Type 
 mvtTupleTwoTypes = MtVal(mfTuple,(mvtType,mvtType),None)
+mvtUnit = MtVal(mfTuple,(),((),)) # only one value, so set it.
 #mvTupleTwoAnys = Mval(mvtTupleTwoTypes,(mvtAny,mvtAny)) # (Any,Any) : Tuple[Any Any]
 mfProc = Mfamily('Proc',P.mProc,mvtTupleTwoTypes)
 mvtProcAnyAny = MtVal(mfProc,(mvtAny,mvtAny),None)
 #mvtProcAnyAny = MtVal(mfProc,mvTupleTwoAnys,None)
 mvtClosureT = mvtProcAnyAny
+
+# Any=>Empty isA P=>Q isA Empty=>Any
+mvtTopProc = mvtEmptyAny = MtVal(mfProc,(mvtEmpty,mvtAny),None)
+mvtBottomProc = mvtAnyEmpty = MtVal(mfProc,(mvtAny,mvtEmpty),None)
 
 #mvListProcAnyAnyAndAny = Mval(mvtTupleTwoTypes,(mvtProcAnyAny,mvtAny))
 mvtTupleProcAnyAnyAndAny = MtVal(mfTuple,(mvtProcAnyAny,mvtAny),None)
@@ -119,9 +129,6 @@ def mvMakeDecimal(d):
 #mVstatements = Mval(mvTstatements,P.PvRstatements)
 
 #mVdiscard = Mval(mvtDiscard,P.mDiscard) # value of type Discard -- should it just be unit?
-
-mfEmpty = Mfamily('Empty',P.mEmpty,None)
-mvtEmpty = MtVal(mfEmpty,None,None)
 
 # equal -- _X x _Y => Intersection[_X _Y] -- just Tuple[Any Any]=>Any for moment
 #mvListAnyAny = Mval(mvtListOfType,(mvtAny,mvtAny))
@@ -155,19 +162,35 @@ mvTcasePswap = MtVal(mfProc,(mvtTupleAnyListProcAnyAny,mvtAny),(mPcasePswap,))
 mVcasePswap = Mval(mvTcasePswap,mPcasePswap)
 
 # toType -- Any x t:Type => t (t is the Type parameter), but just Tuple[Any Type]=>Any here
-# but the Mval will have the required type after
+# but the Mval will have the required type after. Cf isType
 #mvListAnyType = Mval(mvtListOfType,(mvtAny,mvtType))
 mvtTupleAnyType = MtVal(mfTuple,(mvtAny,mvtType),None)
 #mvListTupleAnyTypeAny = Mval(mvtListOfType,(mvtTupleAnyType,mvtAny))
-mvtTupleTupleAnyTypeAny = MtVal(mfTuple,(mvtTupleAnyType,mvtAny),None)
+#mvtTupleTupleAnyTypeAny = MtVal(mfTuple,(mvtTupleAnyType,mvtAny),None)
+mvtProcAnyTypeToAny = MtVal(mfProc,(mvtTupleAnyType,mvtAny),None)
 mPtoType = Mprim('(:)',P.PvRtoType)
-mvTtoType = typeWithVal(mvtTupleTupleAnyTypeAny,mPtoType)
+mvTtoType = typeWithVal(mvtProcAnyTypeToAny,mPtoType)
 mVtoType = Mval(mvTtoType,mPtoType)
+
+# isType -- Any x t:Type => t (t is the Type parameter), but just Tuple[Any Type]=>Any here
+# but the Mval will have the required type after. Cf toType
+#mvListAnyType = Mval(mvtListOfType,(mvtAny,mvtType))
+#mvtTupleAnyType = MtVal(mfTuple,(mvtAny,mvtType),None)
+#mvListTupleAnyTypeAny = Mval(mvtListOfType,(mvtTupleAnyType,mvtAny))
+#mvtTupleTupleAnyTypeAny = MtVal(mfTuple,(mvtTupleAnyType,mvtAny),None)
+mPisType = Mprim('(::)',P.PvRisType)
+mvTisType = typeWithVal(mvtProcAnyTypeToAny,mPisType)
+mVisType = Mval(mvTisType,mPisType)
 
 # tuple2list -- Tuple[lt:List(Type)] => List(Union(lt)) // Any => Any
 mPtuple2list = Mprim('(t2l)',P.PvRtuple2list)
 mvTtuple2list = MtVal(mfProc,(mvtAny,mvtAny),(mPtuple2list,))
-mVtuple2list = Mval(mvTtuple2list,Mprim('(t2l)',mPtuple2list))
+mVtuple2list = Mval(mvTtuple2list,mPtuple2list)
+
+# consTuple2list -- Tuple[hd,Tuple[lt:List(Type)]] => List(Union(hd,lt)) // Any => Any
+mPconsTuple2list = Mprim('(ct2l)',P.PvRconsTuple2list)
+mvTconsTuple2list = MtVal(mfProc,(mvtAny,mvtAny),(mPconsTuple2list,))
+mVconsTuple2list = Mval(mvTconsTuple2list,mPconsTuple2list)
 
 # greaterOrFail -- Nat x Nat => Nat
 #mvListTwoNats = Mval(mvtListOfType,(mvtNat,mvtNat))
@@ -221,6 +244,14 @@ def unknownAny():
 #  an MtVal is immutable...
 def tupleFixUp(t): # t:MtVal
     assert t.tMfamily.famObj == P.mTuple
+    if t.tMsubset!=None:
+        tupv = t.tMsubset[0] # only single elt subsets allowed
+        if all(t.tMindx[i].tMsubset!=None and t.tMindx[i].tMsubset[0]==tupv[i]
+                for i in range(len(t.tMindx))):
+            return False,t
+        assert all(t.tMindx[i].tMsubset==None or t.tMindx[i].tMsubset[0]==tupv[i])
+        return True,L.bind(t).tMindx.set(tuple(
+            T.typeWithVal(t.tMindx[i],tupv[i]) for i in range(len(t.tMindx))))
     # Only handle case where tMsubset has 1 element FIXME
     # t.tMindx is an MVal for List(Type).
     tTypes = t.tMindx

@@ -1,5 +1,5 @@
 %/include wombat.wh
 
-`x:Nat;
+`x::Nat;
 42 = print x;
 print (x-1)

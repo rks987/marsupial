@@ -29,9 +29,9 @@
 # ( expr )
 %^operator "None" ["("] () [")"]
 # [] -- empty list
-%^operator "A.AstIdentifier('tuple2list')" ["["] ["]"]
+%^operator "A.AstCall(A.AstTuple(members=(A.AstIdentifier('tuple2list'),A.zeroTuple())))" ["["] ["]"]
 # [ 1 2 3 ]
-%^operator "A.AstIdentifier('tuple2list')" ["[" "A.first2rest"] () [" " repeating] () ["]"]
+%^operator "A.AstIdentifier('consTuple2list')" ["["] () [" " repeating] () ["]"]
 # [1 | [2 3]] -- but more used for pattern matching
 %^operator "A.AstIdentifier('prependList')" ["["] () ["|"] () ["]"]
 # unification! -- lowish priority, left but it doesn't matter
@@ -40,8 +40,10 @@
 %^operator "A.toClosure" ["{"] () ["}"]
 # case exp of [ {option1 } {option2} {option3} ] -- passed to each, only one succeeds
 %^operator "A.AstIdentifier('casePswap')" ["case"] () ["of"] (999)
-# 3:Int
+# loc Int:Int, (3+0i):Rational
 %^operator "A.AstIdentifier('toType')" (90) [":"] (91)
+# 3::Rational
+%^operator "A.AstIdentifier('isType')" (90) ["::"] (91)
 # $ -- no left or right
 %^operator "A.AstClParam()" ["$"]
 # 3 >? 4 -- returns left operand or fails

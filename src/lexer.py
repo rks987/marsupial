@@ -86,5 +86,6 @@ def lexer(fileName):
 
 if __name__ == "__main__":
     # execute only if run as a script
-    for tok in lexer("test.w"):
+    import sys
+    for tok in lexer(sys.argv[1]):
         print(tok)
