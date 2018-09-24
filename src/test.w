@@ -5,6 +5,6 @@
                 { $ = `n >? 0; n*fact(n-1) }
               ]
             };
-    print (fact 4);
-    6 = fact `x; print x
+    print (fact 4)
+#    6 = fact `x; print x
 
