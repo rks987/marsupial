@@ -66,6 +66,10 @@ import collections as C
 import decimal as D
 import gevent
 
+class Mfail(Exception):
+    def __init__(self,ast):
+        self.ast = ast
+
 # myIds and extIds values
 IdTypeReg = C.namedtuple('IdTypeReg','mtval,registry') # registry of uses and waiting closures
 
@@ -415,6 +419,7 @@ class EtCall(Et):
         if newType!=None and not curCh and not paramCh and self.running: return False
         self.running = True
         ds,npt,nct = self.runner.changePR(newParam,newCur) # ????
+        if nct==T.mvtEmpty: raise Mfail(self.ast)
         assert H.isA(npt,self.paramType)!=None # new is down or equal
         if npt!=self.paramType:
             self.paramEt().receive(-1,npt)
@@ -494,8 +499,11 @@ class ClosureRun(Mrun): # an EtCall turns into this if func is a closure. up is 
             if isinstance(self.body.up,FakeEt): self.body.up.setChild(self.body) # hack
         self.updateAnId(' $',newParamT)
         self.updateAnId(' `$',newRsltT)
-        didSomething = self.loop() # we return when nothing to do in body or its descendents
-        return didSomething, self.myIds[' $'].mtval, self.myIds[' `$'].mtval
+        try: 
+            didSomething = self.loop() # we return when nothing to do in body or its descendents
+            return didSomething, self.myIds[' $'].mtval, self.myIds[' `$'].mtval
+        except Mfail:
+            return True,T.mvtEmpty,T.mvtEmpty
 
 EtClParam = EtIdentifier # fake id ' $'
 

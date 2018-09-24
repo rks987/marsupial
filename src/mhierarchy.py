@@ -44,6 +44,7 @@ def isABase(t1,t2): # returns up-down pair, or None
         assert False # I think that's all we need at the moment FIXME
 
 def isA(t1,t2):
+    if t1==T.mvtEmpty: return ( assertFalse, assertFalse ) # works even if t2 is subsetted
     updown = isABase(T.tNoSub(t1),T.tNoSub(t2))
     if updown==None: return None
     up,down = updown

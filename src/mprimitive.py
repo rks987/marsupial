@@ -116,7 +116,7 @@ class PvRcasePswap(PVrun):
             #rts[i] = H.intersection2(rts[i],rt) # needed? FIXME
         # Now we have possible params and results, we put together
         # The parameters we are consistent with is the Union of pts, results is Union of rts
-        return H.unionList(pts),H.unionList(rts)
+        return L.bind(pt).tMindx[0].set(H.unionList(pts)),H.unionList(rts) # tupleFixUp?FIXME
 
         # our input must be the lowest (intersection) of all cases inputs.
         # The output must be the union of all outputs, intersected with required type.
@@ -163,7 +163,7 @@ class PvRisType(PVrun):
                 val = up(pt.tMindx[0].tMsubset[0])
                 r = L.bind(pt).tMindx[0].set(T.typeWithVal(reqT,val))
                 r = T.tupleFixUp(r)[1]
-        return r, r.tMsubset[0]
+        return r, r.tMindx[0]
 
 # tuple2list -- Tuple[lt:List(Type)] => List(Union(lt))
 class PvRtuple2list(PVrun): # this only needs to run forwards
@@ -208,6 +208,8 @@ class PvRgreaterOrFail(PVrun):
         leftT = H.intersection2(T.mvtNat,pt.tMindx[0])
         rightT = H.intersection2(T.mvtNat,pt.tMindx[1])
         grofT = H.intersection2(T.mvtNat,rt) # mvtEmpty if fail
+        if grofT==T.mvtEmpty or leftT==T.mvtEmpty or rightT==T.mvtEmpty:
+            return T.mvtEmpty,T.mvtEmpty
         left = leftT.tMsubset[0] if leftT.tMsubset!=None else None
         right = rightT.tMsubset[0] if rightT.tMsubset!=None else None
         grof = grofT.tMsubset[0] if grofT.tMsubset!=None else None
@@ -216,18 +218,19 @@ class PvRgreaterOrFail(PVrun):
             if left>right:
                 grof = left
             else:
-                grofT=T.mvtEmpty # which isA Nat
+                return T.mvtEmpty,T.mvtEmpty
+                #grofT=T.mvtEmpty # which isA Nat
         elif left!=None and grof!=None: # and right==None
-            assert grof==left
+            if grof!=left: return T.mvtEmpty,T.mvtEmpty
             return T.MtVal(T.mfTuple,(leftT,rightT),None), grofT
         elif right!=None and grof!=None: # and left==None
             left = grof
-            assert left>right
+            if left<=right: return T.mvtEmpty,T.mvtEmpty
         else:
             return T.MtVal(T.mfTuple,(leftT,rightT),None), grofT
         # left, right and grofT defined, maybe grof
         return T.tupleFixUp(T.MtVal(T.mfTuple,(leftT,rightT),((left,right),)))[1],\
-               (T.typeWithVal(T.mvtNat,grof) if grof!=None else T.mvtEmpty)
+               T.typeWithVal(T.mvtNat,grof)
 
 # starOp -- Nat x Nat => Nat
 class PvRstarOp(PVrun):
