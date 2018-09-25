@@ -243,22 +243,29 @@ def unknownAny():
 
 #  an MtVal is immutable...
 def tupleFixUp(t): # t:MtVal
+    if t==mvtEmpty: return False,t
     assert t.tMfamily.famObj == P.mTuple
+    subs = tuple(fixIfTuple(t.tMindx[i]) for i in range(len(t.tMindx)))
     if t.tMsubset!=None:
         tupv = t.tMsubset[0] # only single elt subsets allowed
-        if all(t.tMindx[i].tMsubset!=None and t.tMindx[i].tMsubset[0]==tupv[i]
-                for i in range(len(t.tMindx))):
+        if all(subs[i].tMsubset!=None and subs[i].tMsubset[0]==tupv[i]
+                for i in range(len(subs))):
             return False,t
-        assert all(t.tMindx[i].tMsubset==None or t.tMindx[i].tMsubset[0]==tupv[i])
+        assert all(subs[i].tMsubset==None or subs[i].tMsubset[0]==tupv[i]\
+                for i in range(len(subs)))
         return True,L.bind(t).tMindx.set(tuple(
-            T.typeWithVal(t.tMindx[i],tupv[i]) for i in range(len(t.tMindx))))
+            typeWithVal(subs[i],tupv[i]) for i in range(len(subs))))
     # Only handle case where tMsubset has 1 element FIXME
     # t.tMindx is an MVal for List(Type).
-    tTypes = t.tMindx
-    if all (tt.tMsubset!=None for tt in tTypes):
-        newtMsubset = (tuple(tt.tMsubset[0] for tt in tTypes),)
-        return True,L.bind(t).tMsubset.set(newtMsubset) # MtVal(t.tMfamily,t.tMindx,newtMsubset)
-    return False,t
+    for tt in subs:
+        if tt.tMsubset==None: return False,t
+    #if all (tt.tMsubset!=None for tt in subs):
+    newtMsubset = (tuple(tt.tMsubset[0] for tt in subs),)
+    return True,L.bind(t).tMsubset.set(newtMsubset) # MtVal(t.tMfamily,t.tMindx,newtMsubset)
+
+def fixIfTuple(t):
+    if t.tMfamily.famObj!=P.mTuple: return t
+    return tupleFixUp(t)[1]
 
 def vEqual(t,v1,v2): # check equality of .value for type t
     if v1==v2: return True

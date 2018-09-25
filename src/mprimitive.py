@@ -11,7 +11,7 @@
 import cttypes as T
 import mhierarchy as H
 import lenses as L
-#import interp as I
+import interp as I
 #import combine
 
 class TFam:
@@ -62,6 +62,7 @@ class PvRstatements(PVrun):
         self.txt='(;)'
     def pTrT(self,pt,rt):
         assert pt.tMfamily==T.mfTuple and len(pt.tMindx)==2
+        if pt.tMindx[0]==T.mvtEmpty: return T.mvtEmpty,T.mvtEmpty # fail
         self.rt = H.intersection2(pt.tMindx[1],rt)
         self.pt = L.bind(pt).tMindx[1].set(self.rt)
         ch,self.pt = T.tupleFixUp(self.pt)
@@ -103,19 +104,19 @@ class PvRcasePswap(PVrun):
         assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
         if pt.tMsubset==None: return pt,rt # we could do a bit more than this??
         cases = pt.tMsubset[0][1]
-        p4c = pt.tMsubset[0][0]
+        p4c = pt.tMindx[0]
         pts = [None]*len(cases)
         rts = [None]*len(cases)
         for i in range(len(cases)):
             #assert isinstance(cases[i],I.EtClosure) # don't allow primitive FIXME
-            cEt = self.caller.callEt
-            cr = ClosureRun(None,cases[i]) # I don't think callEt param is used????
-            pts[i],rts[i] = cr.changePR(pt,rt)
-            pts[i] = H.intersection2(pts[i],pt) # needed? FIXME
-            rts[i] = H.intersection2(rts[i],rt) # needed? FIXME
+            #cEt = self.caller.callEt
+            cr = I.ClosureRun(None,cases[i]) # I don't think callEt param is used????
+            didSomething,pts[i],rts[i] = cr.changePR(p4c,rt)
+            #pts[i] = H.intersection2(pts[i],p4c) # needed? FIXME
+            #rts[i] = H.intersection2(rts[i],rt) # needed? FIXME
         # Now we have possible params and results, we put together
         # The parameters we are consistent with is the Union of pts, results is Union of rts
-        return H.unionList(pts),H.unionList(rts)
+        return L.bind(pt).tMindx[0].set(H.unionList(pts)),H.unionList(rts) # tupleFixUp?FIXME
 
         # our input must be the lowest (intersection) of all cases inputs.
         # The output must be the union of all outputs, intersected with required type.
@@ -131,8 +132,8 @@ class PvRtoType(PVrun):
         if pt.tMindx[1].tMsubset==rt.tMsubset==None: return pt,rt
         assert pt.tMindx[1].tMfamily==T.mfType and len(pt.tMindx[1].tMsubset)==1
         reqT = pt.tMindx[1].tMsubset[0]
-        irt = H.intersection2(reqT,rt) # irt must have the value ?!?
-        return L.bind(pt).tMindx[0].set(irt), irt
+        irt = H.intersection3(pt.tMindx[0],reqT,rt) # irt must have the value ?!?
+        return T.tupleFixUp(L.bind(pt).tMindx[0].set(irt))[1], T.fixIfTuple(irt)
         #if pt.tMindx[0].tMsubset!=None:
         #    nv = H.conv(pt.tMindx[0].tMsubset[0],pt.tMindx[0],irt)
         #    irtWithVal = T.typeWithVal(irt,val)
@@ -161,7 +162,8 @@ class PvRisType(PVrun):
                 up,down = updown
                 val = up(pt.tMindx[0].tMsubset[0])
                 r = L.bind(pt).tMindx[0].set(T.typeWithVal(reqT,val))
-        return T.tupleFixUp(r)[1], rt
+                r = T.tupleFixUp(r)[1]
+        return r, r.tMindx[0]
 
 # tuple2list -- Tuple[lt:List(Type)] => List(Union(lt))
 class PvRtuple2list(PVrun): # this only needs to run forwards
@@ -206,6 +208,8 @@ class PvRgreaterOrFail(PVrun):
         leftT = H.intersection2(T.mvtNat,pt.tMindx[0])
         rightT = H.intersection2(T.mvtNat,pt.tMindx[1])
         grofT = H.intersection2(T.mvtNat,rt) # mvtEmpty if fail
+        if grofT==T.mvtEmpty or leftT==T.mvtEmpty or rightT==T.mvtEmpty:
+            return T.mvtEmpty,T.mvtEmpty
         left = leftT.tMsubset[0] if leftT.tMsubset!=None else None
         right = rightT.tMsubset[0] if rightT.tMsubset!=None else None
         grof = grofT.tMsubset[0] if grofT.tMsubset!=None else None
@@ -214,18 +218,19 @@ class PvRgreaterOrFail(PVrun):
             if left>right:
                 grof = left
             else:
-                grofT=T.mvtEmpty # which isA Nat
+                return T.mvtEmpty,T.mvtEmpty
+                #grofT=T.mvtEmpty # which isA Nat
         elif left!=None and grof!=None: # and right==None
-            assert grof==left
+            if grof!=left: return T.mvtEmpty,T.mvtEmpty
             return T.MtVal(T.mfTuple,(leftT,rightT),None), grofT
         elif right!=None and grof!=None: # and left==None
             left = grof
-            assert left>right
+            if left<=right: return T.mvtEmpty,T.mvtEmpty
         else:
             return T.MtVal(T.mfTuple,(leftT,rightT),None), grofT
         # left, right and grofT defined, maybe grof
         return T.tupleFixUp(T.MtVal(T.mfTuple,(leftT,rightT),((left,right),)))[1],\
-               (T.typeWithVal(T.mvtNat,grof) if grof!=None else T.mvtEmpty)
+               T.typeWithVal(T.mvtNat,grof)
 
 # starOp -- Nat x Nat => Nat
 class PvRstarOp(PVrun):

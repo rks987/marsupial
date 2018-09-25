@@ -260,7 +260,7 @@ def getSubops( toks,opCtx):
                 assert len(oiL)==1 or all(oiL[0].subops[indx].v['param'].subsubs==\
                         oiL[i].subops[indx].v['param'].subsubs for i in range(1,len(oiL)))
                 ssOpInfo = op.OpInfo(p, oiL[0].subops[indx].v['allAdjust'], \
-                                     oil[0].subops[indx].v['param'].ssParamLen, \
+                                     oiL[0].subops[indx].v['param'].ssParamLen, \
                                      oiL[0].subops[indx].v['param'].subsubs ) # faked up OpInfo
                 ssOpCtx = OpCtx(upOpCtx=opCtx, indx=0 ,altOpInfos=[ssOpInfo]) # only 1 OpInfo
                 oi,pl,toks = getSubops(toks,ssOpCtx) # looks wrong???

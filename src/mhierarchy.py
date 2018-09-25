@@ -44,6 +44,7 @@ def isABase(t1,t2): # returns up-down pair, or None
         assert False # I think that's all we need at the moment FIXME
 
 def isA(t1,t2):
+    if t1==T.mvtEmpty: return ( assertFalse, assertFalse ) # works even if t2 is subsetted
     updown = isABase(T.tNoSub(t1),T.tNoSub(t2))
     if updown==None: return None
     up,down = updown
@@ -94,7 +95,8 @@ def intersection2Base(t1,t2): # 2 MtVal, not subset
     if isA21!=None: return t2
     if t1.tMfamily==T.mfTuple: # intersect componentwise
         if t2.tMfamily!=T.mfTuple or len(t1.tMindx)!=len(t2.tMindx): return T.mvtEmpty
-        intsecs = tuple(intersection2(t1.tMindx[i],t2.tMindx[i]) for i in range(len(t1.tMindx)))
+        intsecs = tuple(intersection2Base(T.tNoSub(t1.tMindx[i]),T.tNoSub(t2.tMindx[i]))\
+                for i in range(len(t1.tMindx)))
         if any(intsecs[i]==T.mvtEmpty for i in range(len(intsecs))): return T.mvtEmpty
         return T.MtVal(T.mfTuple,intsecs,None)
     return None #T.mvtEmpty # need to handle more complex cases FIXME
