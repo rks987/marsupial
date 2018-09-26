@@ -192,15 +192,15 @@ mPconsTuple2list = Mprim('(ct2l)',P.PvRconsTuple2list)
 mvTconsTuple2list = MtVal(mfProc,(mvtAny,mvtAny),(mPconsTuple2list,))
 mVconsTuple2list = Mval(mvTconsTuple2list,mPconsTuple2list)
 
-# greaterOrFail -- Nat x Nat => Nat
+# geOrFail -- Nat x Nat => Nat
 #mvListTwoNats = Mval(mvtListOfType,(mvtNat,mvtNat))
 mvtTupleTwoNats = MtVal(mfTuple,(mvtNat,mvtNat),None)
 #mvListTupleTwoNatsNat = Mval(mvtListOfType,(mvtTupleTwoNats,mvtNat))
 #mvtTupleTupleTwoNatsNat = MtVal(mfTuple,mvListTupleTwoNatsNat,None)
 #mvTupleTupleTwoNatsNat = Mval(mvtTupleTupleTwoNatsNat,((mvtNat,mvtNat),mvtNat))
-mPgreaterOrFail = Mprim('(>?)',P.PvRgreaterOrFail)
-mvTgreaterOrFail = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(mPgreaterOrFail,))
-mVgreaterOrFail = Mval(mvTgreaterOrFail,mPgreaterOrFail)
+mPgeOrFail = Mprim('(>=?)',P.PvRgeOrFail)
+mvTgeOrFail = MtVal(mfProc,(mvtTupleTwoNats,mvtNat),(mPgeOrFail,))
+mVgeOrFail = Mval(mvTgeOrFail,mPgeOrFail)
 
 # starOp -- Nat x Nat => Nat
 mPstarOp = Mprim('(*)',P.PvRstarOp)

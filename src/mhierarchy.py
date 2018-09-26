@@ -120,10 +120,12 @@ def intersection2(t1,t2):
         v1 = updown1[1](t1.tMsubset[0])
         return T.mvtEmpty if not T.vEqual(base,v1,v2) else T.typeWithVal(base,v1)
         
-def intersection3(t1,t2,t3):
-    i2 = intersection2(t2,t3)
-    if i2==None: return None
-    return intersection2(t1,i2) # probably unwise
+def intersectionList(t):
+    if len(t)==0: return T.mvtAny
+    if len(t)==1: return t[0]
+    intsec = intersection2(t[0],t[1])
+    for i in range(2,len(t)): intsec = intersection2(intsec,t[i])
+    return intsec
 
 # unless one is less than other we return Any. FIXME
 def union2(t1,t2):

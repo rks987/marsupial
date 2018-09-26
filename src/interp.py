@@ -1,5 +1,9 @@
 # interp.py is a debugging step, to make sure we understand how execution works.
 
+# For normal execution we have the input and we bring the output down from Any.
+# If we are going backwards, and we don't know the input then it should start
+# at Empty and work up. However this seems tricky.
+
 # [[Rewriten so that there is less use of values, mostly only types.
 # A value is just a type restricted to a single value. In a wildly optimistic
 # way, I see this as a step towards a language where we are interested in types as
@@ -23,8 +27,7 @@
 # implementations), but I don't trust them. When an Et sends a message that typically 
 # sets off a cascade of messages, including ones coming back. So we need to handle
 # buffering and such like. We do this by: (a) we just grab incoming messages and
-# store in .rcvd; (b) whenever we have anything in rcvd or toSend we run loop;
-# (c) loop sends stuff from toSend whenever rcvd is empty.
+# store in .rcvd; (b) whenever we have anything in rcvd closureRun call us in loop.
 #
 # Note that parents know about their children and send/receive newType of the child.
 #
@@ -48,15 +51,6 @@
 # If the shadowLevel>0 but shadowing is None, then we can unshadow by reducing
 # shadowLevel and unshadowing connected stuff, and returning self. If shadowing does 
 # point to something then we fix that and return it.
-
-# Notes for the 0.0.4 refactor:
-# 1. Things at the bottom turn into EtValue or EtFail and don't accept or gen messages.
-#    (They retain a pointer to last val for debugging).
-# 2. A ClosureRun generates the Et tree for its body. It then runs the body deep
-#    first. Resolved stuff gets turned into values or fails. The extIds of the
-#    closure must be set, so they get turned into EtValue as it builds.
-# 3. ClosureRun looks for children with stuff in rcvd and calls their loop. Loop does
-#    any initialization that hasn't been done. 
 
 import lenses as L
 import mast as A
@@ -503,7 +497,7 @@ class ClosureRun(Mrun): # an EtCall turns into this if func is a closure. up is 
             didSomething = self.loop() # we return when nothing to do in body or its descendents
             return didSomething, self.myIds[' $'].mtval, self.myIds[' `$'].mtval
         except Mfail:
-            return True,T.mvtEmpty,T.mvtEmpty
+            return True,T.mvtAny,T.mvtEmpty
 
 EtClParam = EtIdentifier # fake id ' $'
 
@@ -570,7 +564,7 @@ builtins = {
             "toType":IdTypeReg(T.mvTtoType,[]),
             "tuple2list":IdTypeReg(T.mvTtuple2list,[]),
             "consTuple2list":IdTypeReg(T.mvTconsTuple2list,[]),
-            "greaterOrFail":IdTypeReg(T.mvTgreaterOrFail,[]),
+            "geOrFail":IdTypeReg(T.mvTgeOrFail,[]),
             "starOp":IdTypeReg(T.mvTstarOp,[]),
             "subtract":IdTypeReg(T.mvTsubtract,[]),
             "print":IdTypeReg(T.mvTprint,[])

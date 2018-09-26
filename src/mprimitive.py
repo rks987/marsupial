@@ -55,14 +55,14 @@ class PVrun:
 # The param should be a tuple -- assert that (??).
 # The result and the 2nd component of param stay the same.
 # We don't influence the first component.
-# NB if rslt and 2nd param can't be unified then fail -- FIXME
+# NB if rslt and 2nd param can't be unified then fail 
 class PvRstatements(PVrun):
     def __init__(self,caller):
         super().__init__(caller)
         self.txt='(;)'
     def pTrT(self,pt,rt):
         assert pt.tMfamily==T.mfTuple and len(pt.tMindx)==2
-        if pt.tMindx[0]==T.mvtEmpty: return T.mvtEmpty,T.mvtEmpty # fail
+        if pt.tMindx[0]==T.mvtEmpty: return T.mvtAny,T.mvtEmpty # fail
         self.rt = H.intersection2(pt.tMindx[1],rt)
         self.pt = L.bind(pt).tMindx[1].set(self.rt)
         ch,self.pt = T.tupleFixUp(self.pt)
@@ -77,7 +77,7 @@ class PvRequal(PVrun):
         self.txt = '(=)'
     def pTrT(self,pt,rt):
         assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
-        self.rt = H.intersection3(pt.tMindx[0],pt.tMindx[1],rt)
+        self.rt = H.intersectionList([pt.tMindx[0],pt.tMindx[1],rt])
         ch,self.pt = T.tupleFixUp(T.MtVal(T.mfTuple,(self.rt,self.rt),None))
         return self.pt,self.rt
 
@@ -90,33 +90,28 @@ class PvRequal(PVrun):
 # we fail.
 # Hmm, maybe not so hard. To restart (no side-effects) just ignore current Et
 # and start a new one from scratch.
-#NOTE this is a temp version doing firstCase with given value
+#NOTE this is a temp version doing firstCase 
 class PvRcasePswap(PVrun):
     def __init__(self,caller):
         super().__init__(caller)
         self.txt = '(case)'
-        #assert H.isA(paramT,T.mvtTupleAnyListProcAnyAny)
         self.cases = None
         self.param4case = None
-    #def run(self): # this is an anachronism
-    #    self.caseControl = combine.caseP(self,self.cases,self.param4case,self.rsltT)
     def pTrT(self,pt,rt):
         assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
-        if pt.tMsubset==None: return pt,rt # we could do a bit more than this??
-        cases = pt.tMsubset[0][1]
+        #if pt.tMsubset==None: return pt,rt # we could do a bit more than this??
+        cases = pt.tMindx[1].tMsubset[0]
         p4c = pt.tMindx[0]
+        if p4c.tMsubset==None and rt.tMsubset==None: return pt,rt
         pts = [None]*len(cases)
         rts = [None]*len(cases)
         for i in range(len(cases)):
             #assert isinstance(cases[i],I.EtClosure) # don't allow primitive FIXME
-            #cEt = self.caller.callEt
             cr = I.ClosureRun(None,cases[i]) # I don't think callEt param is used????
             didSomething,pts[i],rts[i] = cr.changePR(p4c,rt)
-            #pts[i] = H.intersection2(pts[i],p4c) # needed? FIXME
-            #rts[i] = H.intersection2(rts[i],rt) # needed? FIXME
         # Now we have possible params and results, we put together
         # The parameters we are consistent with is the Union of pts, results is Union of rts
-        return L.bind(pt).tMindx[0].set(H.unionList(pts)),H.unionList(rts) # tupleFixUp?FIXME
+        return L.bind(pt).tMindx[0].set(H.intersectionList(pts)),H.unionList(rts) # tupleFixUp?FIXME
 
         # our input must be the lowest (intersection) of all cases inputs.
         # The output must be the union of all outputs, intersected with required type.
@@ -132,7 +127,7 @@ class PvRtoType(PVrun):
         if pt.tMindx[1].tMsubset==rt.tMsubset==None: return pt,rt
         assert pt.tMindx[1].tMfamily==T.mfType and len(pt.tMindx[1].tMsubset)==1
         reqT = pt.tMindx[1].tMsubset[0]
-        irt = H.intersection3(pt.tMindx[0],reqT,rt) # irt must have the value ?!?
+        irt = H.intersectionList([pt.tMindx[0],reqT,rt]) # irt must have the value ?!?
         return T.tupleFixUp(L.bind(pt).tMindx[0].set(irt))[1], T.fixIfTuple(irt)
         #if pt.tMindx[0].tMsubset!=None:
         #    nv = H.conv(pt.tMindx[0].tMsubset[0],pt.tMindx[0],irt)
@@ -198,8 +193,8 @@ class PvRconsTuple2list(PVrun): # this only needs to run forwards
                tuple((H.conv(tl.tMindx[i].tMsubset[0],tl.tMindx[i],t)\
                                          for i in range(len(tl.tMindx))))),))
 
-# greaterOrFail -- Nat x Nat => Nat
-class PvRgreaterOrFail(PVrun):
+# geOrFail -- Nat x Nat => Nat
+class PvRgeOrFail(PVrun):
     def __init__(self,caller):
         super().__init__(caller)
         self.txt = '(>?)'
@@ -209,23 +204,23 @@ class PvRgreaterOrFail(PVrun):
         rightT = H.intersection2(T.mvtNat,pt.tMindx[1])
         grofT = H.intersection2(T.mvtNat,rt) # mvtEmpty if fail
         if grofT==T.mvtEmpty or leftT==T.mvtEmpty or rightT==T.mvtEmpty:
-            return T.mvtEmpty,T.mvtEmpty
+            return T.mvtAny,T.mvtEmpty
         left = leftT.tMsubset[0] if leftT.tMsubset!=None else None
         right = rightT.tMsubset[0] if rightT.tMsubset!=None else None
         grof = grofT.tMsubset[0] if grofT.tMsubset!=None else None
         if left!=None and right!=None:
-            if grof!=None: assert grof==left
-            if left>right:
+            if grof!=None and grof!=left: return T.mvtAny,T.mvtEmpty
+            if left>=right:
                 grof = left
             else:
-                return T.mvtEmpty,T.mvtEmpty
+                return T.mvtAny,T.mvtEmpty
                 #grofT=T.mvtEmpty # which isA Nat
         elif left!=None and grof!=None: # and right==None
             if grof!=left: return T.mvtEmpty,T.mvtEmpty
             return T.MtVal(T.mfTuple,(leftT,rightT),None), grofT
         elif right!=None and grof!=None: # and left==None
             left = grof
-            if left<=right: return T.mvtEmpty,T.mvtEmpty
+            if left<right: return T.mvtAny,T.mvtEmpty
         else:
             return T.MtVal(T.mfTuple,(leftT,rightT),None), grofT
         # left, right and grofT defined, maybe grof
@@ -249,14 +244,14 @@ class PvRstarOp(PVrun):
             if prod!=None: assert prod==left*right
             prod = left*right
         elif left!=None and prod!=None: # and right==None
-            if left==0: return T.mvtEmpty,T.mvtEmpty
+            if left==0: return T.mvtAny,T.mvtEmpty
             right = prod//left
         elif right!=None and prod!=None: # and left==None
-            if right==0: return T.mvtEmpty,T.mvtEmpty
+            if right==0: return T.mvtAny,T.mvtEmpty
             left = prod//right
         else:
             return T.MtVal(T.mfTuple,(leftT,rightT),None), prodT
-        if prod!=left*right: return T.mvtEmpty,T.mvtEmpty
+        if prod!=left*right: return T.mvtAny,T.mvtEmpty
         return T.tupleFixUp(T.MtVal(T.mfTuple,(leftT,rightT),((left,right),)))[1],\
                T.typeWithVal(T.mvtNat,prod)
 
@@ -282,7 +277,7 @@ class PvRsubtract(PVrun):
             left = right+diff
         else:
             return T.MtVal(T.mfTuple,(leftT,rightT),None), diffT
-        if diff<0: return T.mvtEmpty,T.mvtEmpty # Nat has no negative
+        if diff<0: return T.mvtAny,T.mvtEmpty # Nat has no negative
         return T.tupleFixUp(T.MtVal(T.mfTuple,(leftT,rightT),((left,right),)))[1],\
                T.typeWithVal(T.mvtNat,diff)
 
