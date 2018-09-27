@@ -90,7 +90,6 @@ class PvRequal(PVrun):
 # we fail.
 # Hmm, maybe not so hard. To restart (no side-effects) just ignore current Et
 # and start a new one from scratch.
-#NOTE this is a temp version doing firstCase 
 class PvRcasePswap(PVrun):
     def __init__(self,caller):
         super().__init__(caller)
@@ -99,23 +98,17 @@ class PvRcasePswap(PVrun):
         self.param4case = None
     def pTrT(self,pt,rt):
         assert pt.tMfamily == T.mfTuple and len(pt.tMindx)==2
-        #if pt.tMsubset==None: return pt,rt # we could do a bit more than this??
         cases = pt.tMindx[1].tMsubset[0]
         p4c = pt.tMindx[0]
         if p4c.tMsubset==None and rt.tMsubset==None: return pt,rt
         pts = [None]*len(cases)
         rts = [None]*len(cases)
         for i in range(len(cases)):
-            #assert isinstance(cases[i],I.EtClosure) # don't allow primitive FIXME
             cr = I.ClosureRun(None,cases[i]) # I don't think callEt param is used????
             didSomething,pts[i],rts[i] = cr.changePR(p4c,rt)
         # Now we have possible params and results, we put together
         # The parameters we are consistent with is the Union of pts, results is Union of rts
         return L.bind(pt).tMindx[0].set(H.intersectionList(pts)),H.unionList(rts) # tupleFixUp?FIXME
-
-        # our input must be the lowest (intersection) of all cases inputs.
-        # The output must be the union of all outputs, intersected with required type.
-        # For the moment we'll just set it to rt and see FIXME
 
 # toType -- Any x t:Type => t (t is the Type parameter)
 class PvRtoType(PVrun):
