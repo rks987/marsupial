@@ -46,8 +46,8 @@
 %^operator "A.AstIdentifier('isType')" (90) ["::"] (91)
 # $ -- no left or right
 %^operator "A.AstClParam()" ["$"]
-# 3 >? 4 -- returns left operand or fails
-%^operator "A.AstIdentifier('greaterOrFail')" (24) [">?"] (25)
+# 3 >=? 4 -- returns left operand or fails
+%^operator "A.AstIdentifier('geOrFail')" (24) [">=?"] (25)
 # 2*3
 %^operator "A.AstIdentifier('starOp')" (38) ["*"] (39)
 # 2-3
