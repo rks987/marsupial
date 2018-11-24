@@ -12,7 +12,7 @@ compiler.md.
 will also (with some minor improvement) do compile time type checking and compile time
 optimization. The following 3 will thus be diffreent from originally envisaged.
 
-Not implemented and will be different then envisaged:
+Not implemented and will be different than envisaged:
 * The typer then goes through figuring out the type of every expression and inserting
 conversions from isA and convertsTo declarations as required. See typer.md.
 * The coder then makes conversions from implementedBy to implement the code. It prefers to
