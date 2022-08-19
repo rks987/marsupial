@@ -165,7 +165,7 @@ class PvRtuple2list(PVrun): # this only needs to run forwards
         assert all(H.isA(tt,t)!=None for tt in pt.tMindx)
         if pt.tMsubset==None: return pt,T.MtVal(T.mfList,t,None)
         return pt,\
-               T.MtVal(T.mfList,t,tuple((conv(pt.tMsubset[0][i],pt.tMindx[i],t)\
+               T.MtVal(T.mfList,t,tuple((H.conv(pt.tMsubset[0][i],pt.tMindx[i],t)\
                                          for i in range(len(pt.tMindx)))))
 
 # consTuple2list -- (hd,(t1,t2,...) --> [hd t1 t2 ...] -- operasator support

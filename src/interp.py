@@ -58,7 +58,7 @@ import cttypes as T
 import mhierarchy as H
 import collections as C
 import decimal as D
-import gevent
+#import gevent
 
 class Mfail(Exception):
     def __init__(self,ast):
@@ -448,7 +448,7 @@ class EtCall(Et):
 class Mrun: # either PrimitiveRun or ClosureRun
     def __init__(self,callEt):
         self.callEt = callEt
-        gevent.sleep(0) # if greenthreading then give others a go
+        #gevent.sleep(0) # if greenthreading then give others a go
     def changePR0(self,newParamT,newRsltT):
         assert False # must override
     def changePR(self,newParamT,newRsltT):
