@@ -273,10 +273,10 @@ def vEqual(t,v1,v2): # check equality of .value for type t
     # probably there aren't any Any values actually
     if t==mvtAny: return v1.mtVal==v2.mtVal and vEqual(v1.mtVal,v1.value,v2.value)
     if t.tMfamily==mfList: 
-        return len(v1)==len(v2) and all(vEqual(t.tMindx,v1[i],v2[i]) for i in len(v1))
+        return len(v1)==len(v2) and all(vEqual(t.tMindx,v1[i],v2[i]) for i in range(len(v1)))
     if t.tMfamily==mfTuple: # .tMindx is List Type
         return len(t.tMindx)==len(v1)==len(v2) and all(vEqual(t.tMindx[i],v1[i],v2[i]) 
-                                                       for i in len(v1))
+                                                       for i in range(len(v1)))
     assert False # don't think we need other cases yet FIXME
 
 if __name__=="__main__":
